@@ -45,7 +45,8 @@ python3 sim_ros2_bridgeV1.0.py
 
 为了确保仿真环境与 ROS 2 工业级算法的完美咬合，请在运行前务必阅读以下配置：
 
-1. ⚠️ IP 地址与局域网配置 (Network Setup)
+1. ⚠️ IP 地址与局域网配置 (Network Setup) 
+ 
 在运行 sim_ros2_bridgeV1.0.py 之前，请务必用编辑器打开该脚本，找到连接 Web 引擎的代码行（约第 46 行）：
 ```
 self.ws = websocket.WebSocketApp("ws://192.168.1.149:8000/ws/simulation", ...)
@@ -54,7 +55,8 @@ self.ws = websocket.WebSocketApp("ws://192.168.1.149:8000/ws/simulation", ...)
 必须将 192.168.1.149 修改为您运行 Product1.0.py 服务端的实际物理机 IP 地址。
 注：建议在同一个局域网 (LAN) 内进行跨设备测试，以保证 60Hz 物理引擎的毫秒级时空同步。如果在同一台机器上运行，请修改为 ws://127.0.0.1:8000/ws/simulation。
 
-2. 👁️ RViz2 孪生观测核心配置 (RViz2 Setup)
+2. 👁️ RViz2 孪生观测核心配置 (RViz2 Setup) 
+ 
 由于系统为了防卡顿采用了高频传感器数据推送，进入 RViz2 后，请按照以下参数进行配置，否则可能无法观测到数据：
 
 - Global Options: 将 Fixed Frame 设置为 map（如果在建图前仅测试里程计，可暂设为 odom）。
@@ -69,10 +71,12 @@ self.ws = websocket.WebSocketApp("ws://192.168.1.149:8000/ws/simulation", ...)
 
 - Path (全局与局部路径): 点击 Add 添加 Path 组件，分别订阅 /plan (全局规划 A* 路径) 和 /local_plan (TEB/DWA 局部弹性避障路径)，观测小车面对动态巡逻车时的绕行博弈策略。
 
-3. 🖥️ 浏览器硬件加速 (Browser Hardware Acceleration)
+3. 🖥️ 浏览器硬件加速 (Browser Hardware Acceleration) 
+ 
 系统前端包含 40x40 尺度的 3D 渲染引擎。请务必确保您的浏览器开启了“使用图形加速”（设置 -> 系统 -> 使用图形加速），否则可能导致浏览器单线程卡死，进而影响 Web Worker 向后端的雷达测距发包。
 
 4. 🌳 坐标系断层排查 (TF Tree Check)
+
 如果小车在 RViz2 中“乱飞”或报错找不到 base_link，请在终端运行以下命令验证 TF 树是否完整：
 ```bash
 ros2 run tf2_tools view_frames
