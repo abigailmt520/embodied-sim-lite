@@ -87,4 +87,4 @@ ros2 run tf2_tools view_frames
 ## 🤖 AI 赋能声明 (AI Empowerment)
 本项目的核心架构（包括 B/S 通信链路、Three.js 坐标系转换、全域 AABB 碰撞检测算法等）是在 DeepSeek 大模型 的全链条赋能下完成的。AI 的介入不仅将数百小时的底层代码敲击缩短至数日，更成功跨越了跨学科底层物理引擎开发的专业鸿沟。
 
-![输入图片说明](QQ20260503-221343.png)![输入图片说明](QQ20260503-221413.png)
+![输入图片说明](Embodied-SimLite.png)![输入图片说明](SLAM.png)
