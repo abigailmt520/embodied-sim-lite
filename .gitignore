@@ -136,3 +136,27 @@ dmypy.json
 
 # Cython debug symbols
 cython_debug/
+
+# ===== Embodied-SimLite 项目专属（资产隔离 / 隐私 / 可复现产物）=====
+# 系统/编辑器
+.DS_Store
+.claude/
+# 训练产物与日志（仅保留配套权重 ppo_embodied_agent.pth 供开箱复现）
+*.pth
+!ppo_embodied_agent.pth
+*.zip
+checkpoints/
+tb_embodied/
+# 可由脚本复现的运行产物（不入库）
+audit/sessions/
+audit/eval_episodes.csv
+audit/eval_summary.json
+audit/__pycache__/
+diagnostics/backup/
+diagnostics/*.diff
+diagnostics/fork_*.csv
+diagnostics/server.log
+*.orig
+# 内部工作笔记（不公开）
+task/
+old/
