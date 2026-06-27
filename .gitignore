@@ -144,11 +144,14 @@ cython_debug/
 # 训练产物与日志（仅保留配套权重 ppo_embodied_agent.pth 供开箱复现）
 *.pth
 !ppo_embodied_agent.pth
+!ppo_embodied_agent_dyn.pth   # dev/stage1-dynamics 分支：动力学版配套权重（force-add）
 *.zip
+train_dyn.log
 checkpoints/
 tb_embodied/
 # 可由脚本复现的运行产物（不入库）
 audit/sessions/
+audit/physics_sessions/
 audit/eval_episodes.csv
 audit/eval_summary.json
 audit/__pycache__/

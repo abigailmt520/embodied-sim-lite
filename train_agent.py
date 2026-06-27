@@ -14,6 +14,8 @@ train_agent.py
 产物：训练权重保存为 ppo_embodied_agent.pth（policy 的 state_dict）。
 """
 
+import os
+
 import torch
 from stable_baselines3 import PPO
 from stable_baselines3.common.monitor import Monitor
@@ -23,9 +25,10 @@ from stable_baselines3.common.callbacks import CheckpointCallback, BaseCallback
 from embodied_env import EmbodiedNavEnv
 
 # ====================== 训练超参 ======================
-TOTAL_TIMESTEPS = 1_000_000        # 总训练步数（按收敛情况调整）
-MODEL_PATH = "ppo_embodied_agent.pth"   # 最终权重（policy state_dict）
-SB3_NATIVE_PATH = "ppo_embodied_agent"  # SB3 原生 zip 存档（更鲁棒的备份）
+# 可由环境变量覆盖（dev/stage1-dynamics 分支：默认产出 *_dyn 权重，绝不覆盖论文 .pth）
+TOTAL_TIMESTEPS = int(os.environ.get("EMBODIED_TIMESTEPS", 1_000_000))  # 总训练步数
+MODEL_PATH = os.environ.get("EMBODIED_MODEL_PATH", "ppo_embodied_agent_dyn.pth")  # 动力学版权重
+SB3_NATIVE_PATH = os.environ.get("EMBODIED_SB3_PATH", "ppo_embodied_agent_dyn")   # SB3 原生 zip
 TB_LOG_DIR = "./tb_embodied/"      # TensorBoard 日志目录
 CHECKPOINT_DIR = "./checkpoints/"  # 周期性检查点目录
 
@@ -87,7 +90,7 @@ def main():
     callbacks = [
         RewardLogCallback(),
         CheckpointCallback(save_freq=50_000, save_path=CHECKPOINT_DIR,
-                           name_prefix="ppo_ckpt"),
+                           name_prefix="ppo_dyn_ckpt"),
     ]
 
     print(">>> 进入超实时训练循环（无网络/无异步时钟，单核满载）...")

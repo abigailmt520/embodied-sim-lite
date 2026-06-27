@@ -49,8 +49,25 @@ class EmbodiedNavEnv(gym.Env):
     GOAL_RADIUS = 0.40      # 到达判定半径 (m)
     DT = 0.10               # 运动学积分步长 (s)，对应 10Hz 决策频率
 
-    MAX_LIN_VEL = 1.0       # 线速度上限 (m/s)，v=1.0 时的真实速度
-    MAX_ANG_VEL = 1.5       # 角速度上限 (rad/s)，|w|=1.0 时的真实角速度
+    MAX_LIN_VEL = 1.0       # 线速度上限 (m/s)，v=1.0 时的目标速度（A-mode 指令上限）
+    MAX_ANG_VEL = 1.5       # 角速度上限 (rad/s)，|w|=1.0 时的目标角速度
+
+    # ====================== 动力学核（Phase1a · F1 简化动力学迁后端）======================
+    # 设计：动作 [v,w] 解释为「目标速度」；后端用 质量/惯量/黏性阻尼 把「实际速度」
+    #       一阶趋向目标，再由实际速度积分位姿。零刚体依赖、纯 numpy、可解析能量审计。
+    # 分层：_integrate_dynamics() 是共享核（接受 力/力矩 函数）；A-mode 在其外包一层 P 控制器
+    #       （目标速度→力）。未来 B-mode 直接喂原始轮力 [f_l,f_r]，复用同一核。
+    ENABLE_DYNAMICS = True   # True=力控动力学（含惯性/阻尼）；False=退回原零惯性运动学（回归对照）
+    MASS         = 1.0       # 车体质量 m (kg)（沿用原版默认 old:710）
+    INERTIA_COEF = 0.5       # 转动惯量 I = INERTIA_COEF * MASS（沿用原版 κ=0.5, old:711）
+    C_LIN        = 3.0       # 线性黏性阻尼系数 (kg/s)：把原版后乘 *0.95 改写为标准力项 -c·v（可审）
+    C_ANG        = 3.0       # 角向黏性阻尼系数
+    KP_V         = 12.0      # A-mode 速度跟踪 P 增益（目标速度→执行器力）
+    KP_W         = 12.0      # A-mode 角速度跟踪 P 增益
+    N_SUB        = 5         # 每个 env.step 的物理子步数（h = DT / N_SUB）
+    # 执行器物理速度上限（稳态 v_ss = KP/(KP+C)·MAX·，留 25% 余量供越界审计 EC3 判定）
+    V_PHYS_MAX   = MAX_LIN_VEL * 1.25
+    W_PHYS_MAX   = MAX_ANG_VEL * 1.25
 
     # ====================== 里程计漂移（D-018：Odom 真打滑）======================
     # 轮式里程计相对真值的「打滑系数」：odom 积分施加乘性偏差 + 同量级比例噪声，
@@ -117,6 +134,8 @@ class EmbodiedNavEnv(gym.Env):
         # 运行时状态（在 reset 中初始化）
         self.pos = None          # 底盘位置 np.array([x, y])（真值 Truth，无噪声基准）
         self.theta = None        # 底盘朝向 (rad)（真值 Truth）
+        self.v_act = 0.0         # 实际线速度 (m/s)（动力学积分态；零惯性档恒等于目标速度）
+        self.w_act = 0.0         # 实际角速度 (rad/s)
         self.odom_pos = None     # 里程计位置 np.array([x, y])（带打滑漂移，独立积分）
         self.odom_theta = None   # 里程计朝向 (rad)（带打滑漂移）
         self.goal = None         # 目标点 np.array([x, y])
@@ -126,6 +145,16 @@ class EmbodiedNavEnv(gym.Env):
         # 全局单调帧序号（跨回合不复位），供完整性审计校验"帧序单调"——区别于会复位的 step_count
         self.frame_seq = 0
         self.last_lidar = None   # 缓存最近一次 lidar，供渲染/广播复用
+
+        # —— 能量审计账本（本 step 的真实数字，供 energy_audit 消费）——
+        #    ΔE_kin 应 ≈ W_act − D_damp（精确遥测，clean 残差到机器精度，见 _integrate_dynamics）
+        self.E_kin = 0.0         # 当前动能 ½m·v_act² + ½I·w_act²
+        self.last_dE = 0.0       # 本 step 动能变化量
+        self.last_W_act = 0.0    # 本 step 执行器净做功（按"声称"力，供审计对账）
+        self.last_D_damp = 0.0   # 本 step 阻尼耗散（按"声称"阻尼系数 C_LIN/C_ANG）
+        # 物理故障注入钩子（None=清洁；audit/physics_injection.py 设置；仅测试，绝不进生产）
+        # 形如 {"mode": "P-1_neg_damp", ...}；藏在 _integrate_dynamics 内部破坏真实积分。
+        self.physics_fault = None
 
         if seed is not None:
             self.reset(seed=seed)
@@ -160,6 +189,14 @@ class EmbodiedNavEnv(gym.Env):
         self.odom_pos = self.pos.copy()
         self.odom_theta = self.theta
 
+        # 5) 动力学态复位：实际速度归零，回合从静止起步；能量账本清零
+        self.v_act = 0.0
+        self.w_act = 0.0
+        self.E_kin = 0.0
+        self.last_dE = 0.0
+        self.last_W_act = 0.0
+        self.last_D_damp = 0.0
+
         self.step_count = 0
         self.prev_dist = float(np.linalg.norm(self.goal - self.pos))
 
@@ -174,19 +211,17 @@ class EmbodiedNavEnv(gym.Env):
         action = np.clip(action, self.action_space.low, self.action_space.high)
         v_cmd, w_cmd = float(action[0]), float(action[1])
 
-        # —— 1) 指令还原为真实物理量 ——
-        v = v_cmd * self.MAX_LIN_VEL
-        w = w_cmd * self.MAX_ANG_VEL
+        # —— 1) 指令还原为「目标速度」（A-mode：动作=目标速度，非瞬时实际速度）——
+        v_tgt = v_cmd * self.MAX_LIN_VEL
+        w_tgt = w_cmd * self.MAX_ANG_VEL
 
-        # —— 2) 真值运动学积分（unicycle 模型，半隐式：先更新朝向再更新位置）——
-        #     真值 Truth 始终用真实 (v,w) 无噪声积分，是评测的金标准基准。
-        self.theta = self._wrap_angle(self.theta + w * self.DT)
-        self.pos = self.pos + np.array(
-            [v * np.cos(self.theta), v * np.sin(self.theta)]
-        ) * self.DT
+        # —— 2) 动力学核推进真值位姿（力控核 + A-mode P 控制器），并结算能量账本 ——
+        #     ENABLE_DYNAMICS=False 时退回原零惯性运动学（v_act≡v_tgt），作回归对照。
+        self._step_dynamics(v_tgt, w_tgt)
 
-        # —— 2b) 里程计积分（D-018 Odom 真打滑）：与真值同式但施加打滑误差，真实分叉 ——
-        self._integrate_odom(v, w)
+        # —— 2b) 里程计积分（D-018 真打滑）：吃「实际速度」v_act/w_act（轮速编码器感知实际而非指令），
+        #         施加打滑误差 → 真实分叉（C1 不变）。位置积分由动力学核已完成，此处仅 odom。
+        self._integrate_odom(self.v_act, self.w_act)
 
         self.step_count += 1
         self.frame_seq += 1        # 全局帧序号单调自增（跨回合不复位）
@@ -218,6 +253,100 @@ class EmbodiedNavEnv(gym.Env):
             "min_lidar": min_lidar,
         }
         return obs, reward, terminated, truncated, info
+
+    # ------------------------------------------------------------------
+    # 动力学核（Phase1a · F1）：力 → 牛顿+黏性阻尼 → 半隐式子步积分 → 真值位姿
+    #   分层：_integrate_dynamics 是共享核（接受 力/力矩 闭包，按当前实际速度求值）；
+    #         _step_dynamics 是 A-mode 外壳（目标速度→P 控制器力）。B-mode 未来直接喂原始力。
+    # ------------------------------------------------------------------
+    def _step_dynamics(self, v_tgt, w_tgt):
+        """A-mode：把目标速度经 P 控制器化为执行器力，调用共享核推进真值位姿。
+
+        ENABLE_DYNAMICS=False：退回零惯性运动学（v_act≡v_tgt、w_act≡w_tgt 直接积分），
+        作为「无动力学」回归对照（能量账本在此档无物理意义，置零）。
+        """
+        if not self.ENABLE_DYNAMICS:
+            self.v_act, self.w_act = v_tgt, w_tgt
+            self.theta = self._wrap_angle(self.theta + self.w_act * self.DT)
+            self.pos = self.pos + np.array(
+                [self.v_act * np.cos(self.theta), self.v_act * np.sin(self.theta)]
+            ) * self.DT
+            self.E_kin = 0.5 * self.MASS * self.v_act ** 2 \
+                + 0.5 * self.INERTIA_COEF * self.MASS * self.w_act ** 2
+            self.last_dE = self.last_W_act = self.last_D_damp = 0.0
+            return
+
+        # A-mode P 控制器：力/力矩 = 增益 ×（目标速度 − 当前实际速度），逐子步按实时 v_act 求值。
+        # 当 v_tgt=0 时 F=KP·(0−v_act)=−KP·v_act 为「真实减速力」→ 天然刹车，
+        # 取代原版 v*=0.5 硬不连续（old:716），且其负功如实进入能量账本。
+        lin_force_of = lambda v: self.KP_V * (v_tgt - v)
+        ang_force_of = lambda w: self.KP_W * (w_tgt - w)
+        self._integrate_dynamics(lin_force_of, ang_force_of)
+
+    def _integrate_dynamics(self, lin_force_of, ang_force_of):
+        """共享动力学核：N_SUB 个半隐式子步，牛顿 + 黏性阻尼，结算精确能量账本。
+
+        守恒律遥测（关键，能量审计的地基）：
+            离散半隐式更新 v_{n+1}=v_n+(h/m)(F−c·v_n) 对 ½m·v² 精确电报：
+                ΔKE = h·F·v_mid − h·c·v_n·v_mid,  v_mid=½(v_n+v_{n+1})
+            故定义 W_act=Σ F·v_mid·h、D_damp=Σ c·v_n·v_mid·h（用「声称」常数）后，
+            清洁运行残差 r=ΔE−(W_act−D_damp) 应到机器精度（≈0）。
+            注入器（physics_fault）只改「实际积分」而账本仍按声称常数结算 → 残差变非零（被审计抓）。
+        """
+        h = self.DT / self.N_SUB
+        m_decl = self.MASS                       # 声称质量（账本/动能用）
+        I_decl = self.INERTIA_COEF * self.MASS   # 声称转动惯量
+        c_lin_decl, c_ang_decl = self.C_LIN, self.C_ANG
+
+        # —— 故障注入参数解包（清洁档全部取声称值；注入档悄悄改「实际」积分参数）——
+        f = self.physics_fault or {}
+        mode = f.get("mode")
+        c_lin_eff = f.get("c_lin_eff", c_lin_decl)   # 实际积分用阻尼（P-1 负/ P-3 置零）
+        c_ang_eff = f.get("c_ang_eff", c_ang_decl)
+        force_mult = f.get("force_mult", 1.0)        # 实际力倍率（P-2 双计=2.0）
+        m_eff = f.get("m_eff", m_decl)               # 实际积分质量（≠声称则 P-5 谎报）
+        skip_lag = f.get("skip_lag", False)          # P-4：跳过惯性滞后，实际速度瞬达/越目标
+        overshoot = f.get("overshoot", 1.0)          # P-4：>1 则越过执行器上限（供 EC3 判定）
+
+        E0 = 0.5 * m_decl * self.v_act ** 2 + 0.5 * I_decl * self.w_act ** 2
+        W_act = 0.0
+        D_damp = 0.0
+
+        for _ in range(self.N_SUB):
+            v0, w0 = self.v_act, self.w_act
+            F = lin_force_of(v0)
+            tau = ang_force_of(w0)
+
+            if skip_lag:
+                # P-4：无视惯性/阻尼，实际速度直接锁到 overshoot×目标（P 控制器零误差点反推 v_tgt=v0+F/KP）。
+                #      overshoot>1 → 持续越执行器上限 + 动能凭空跃变（破坏执行器功率界）。
+                v_tgt_eq = v0 + (F / self.KP_V if self.KP_V else 0.0)
+                w_tgt_eq = w0 + (tau / self.KP_W if self.KP_W else 0.0)
+                v_new = overshoot * v_tgt_eq
+                w_new = overshoot * w_tgt_eq
+            else:
+                a = (force_mult * F - c_lin_eff * v0) / m_eff
+                alpha = (force_mult * tau - c_ang_eff * w0) / (self.INERTIA_COEF * m_eff)
+                v_new = v0 + a * h
+                w_new = w0 + alpha * h
+
+            v_mid = 0.5 * (v0 + v_new)
+            w_mid = 0.5 * (w0 + w_new)
+            # 账本按「声称」力与「声称」阻尼结算（注入器改实际、账本仍声称 → 残差暴露故障）
+            W_act += (F * v_mid + tau * w_mid) * h
+            D_damp += (c_lin_decl * v0 * v_mid + c_ang_decl * w0 * w_mid) * h
+
+            self.v_act, self.w_act = v_new, w_new
+            self.theta = self._wrap_angle(self.theta + self.w_act * h)
+            self.pos = self.pos + np.array(
+                [self.v_act * np.cos(self.theta), self.v_act * np.sin(self.theta)]
+            ) * h
+
+        # 动能用「声称」质量计（P-5 谎报时 E_kin 与真实积分不自洽 → 残差非零）
+        self.E_kin = 0.5 * m_decl * self.v_act ** 2 + 0.5 * I_decl * self.w_act ** 2
+        self.last_dE = self.E_kin - E0
+        self.last_W_act = W_act
+        self.last_D_damp = D_damp
 
     # ------------------------------------------------------------------
     # 里程计积分（D-018：注入真打滑漂移，使 Odom 随时间真实偏离 Truth）
@@ -420,6 +549,15 @@ class EmbodiedNavEnv(gym.Env):
             "terminated": bool(terminated),
             "truncated": bool(truncated),
             "distance": float(info.get("distance", np.linalg.norm(self.goal - self.pos))),
+            # —— Phase1a 加性字段（向后兼容：旧前端/契约层审计忽略未知键，零影响）——
+            "v_act": float(self.v_act),     # 实际线速度（含惯性滞后；前端可显示"指令 vs 实际"）
+            "w_act": float(self.w_act),     # 实际角速度
+            "energy": {                      # 能量账本（供 energy_audit 消费；本 step 真实数字）
+                "E_kin": float(self.E_kin),       # 当前动能 ½m·v² + ½I·w²
+                "dE": float(self.last_dE),        # 本 step 动能变化
+                "W_act": float(self.last_W_act),  # 执行器净做功（按声称力）
+                "D_damp": float(self.last_D_damp),  # 阻尼耗散（按声称阻尼系数）
+            },
         }
 
 
