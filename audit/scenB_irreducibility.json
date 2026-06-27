@@ -120,5 +120,68 @@
     "scenB_v2_irreducible": true,
     "scenB_v1_reducible_by_map": true,
     "claim_holds": true
+  },
+  "soundness": {
+    "rows": {
+      "20": {
+        "delta_max": 0.07541934324448325,
+        "clear_min": 0.7191461855399868,
+        "clear_med": 0.7889319321099076,
+        "ratio": 0.09619971867473748,
+        "naive_fp": 0,
+        "rel_fp": 0,
+        "n": 30,
+        "provable_sound": true
+      },
+      "40": {
+        "delta_max": 0.13248040203555175,
+        "clear_min": 0.5863116002339256,
+        "clear_med": 0.7585416861244638,
+        "ratio": 0.18017982090221007,
+        "naive_fp": 1,
+        "rel_fp": 0,
+        "n": 30,
+        "provable_sound": true
+      },
+      "80": {
+        "delta_max": 0.2675020423553054,
+        "clear_min": 0.530292191801897,
+        "clear_med": 0.8285631486313954,
+        "ratio": 0.406197950685082,
+        "naive_fp": 4,
+        "rel_fp": 0,
+        "n": 30,
+        "provable_sound": true
+      },
+      "160": {
+        "delta_max": 1.0973212039271154,
+        "clear_min": 0.007480531844195484,
+        "clear_med": 0.8169669711358004,
+        "ratio": 1.4174474829531205,
+        "naive_fp": 29,
+        "rel_fp": 0,
+        "n": 30,
+        "provable_sound": false
+      },
+      "320": {
+        "delta_max": 5.387934625856567,
+        "clear_min": -7.901087191915697e-16,
+        "clear_med": 0.00748053184419561,
+        "ratio": 5294676.899495676,
+        "naive_fp": 30,
+        "rel_fp": 0,
+        "n": 30,
+        "provable_sound": false
+      }
+    },
+    "xi_ceiling": 0.5,
+    "radius": 0.2,
+    "provable_sound_windows": [
+      20,
+      40,
+      80
+    ],
+    "delta_crosses_clear_min_at": 160,
+    "sound": true
   }
 }

@@ -71,6 +71,23 @@ def _any_point_in(traj, walls, radius):
     return n
 
 
+def dist_point_aabb(p, w):
+    """点 p 到墙 AABB (xmin,xmax,ymin,ymax) 的欧氏距离（点在 AABB 内则 0）。"""
+    dx = max(w[0] - p[0], 0.0, p[0] - w[1])
+    dy = max(w[2] - p[1], 0.0, p[1] - w[3])
+    return math.hypot(dx, dy)
+
+
+def clearance(p, walls, radius=0.0):
+    """点 p（机器人圆半径 radius）到最近墙的**自由余隙**（贴墙=0，越大越安全）。
+
+    经验 soundness 充分条件：若漂移 δ(t)=‖o_t−x_t‖ < clearance(x_t)，则 o_t 落在不触墙的开球
+    B(x_t, clearance) 内 → o_t 与 x_t 同处一个自由连通区、位移段全程在球内不穿墙 →
+    关系型预言**可证不误报**。故 δ ≪ clearance 即经验 soundness 的直接证据。
+    """
+    return min(dist_point_aabb(p, w) for w in walls) - radius
+
+
 def _result(check, ok, detail, **extra):
     r = {"check": check, "status": "GREEN" if ok else "RED", "ok": bool(ok), "detail": detail}
     r.update(extra)

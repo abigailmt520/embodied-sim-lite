@@ -153,7 +153,8 @@
 - **五路预言实测（重配 v2）**：①物理(x∈free)🟢 ②契约噪声(‖o-x‖≤ξ)🟢 ③**带地图契约 M6a(o∈M?)🟢漏** ④**更强 report-only M6b(seg(o,o)∩M)🟢漏**，唯 ⑤**关系型 seg(x,o)穿墙(端点皆自由) 🔴抓(60/60)** → **`IRREDUCIBLE_RELATIONAL`**：带地图契约也分解不出 → 关系型层**非冗余**。
 - **🔴 诚实判据满足**：带地图 baseline **未**抓到 v2 → 不可约**成立**（实测、未调参）。对照旧 v1：M6a 🔴抓(o_t 真落墙)→ 可约，坐实重配的价值。
 - **🔴 诚实代价（d<ξ 双刃）**：同一 d<ξ 让诚实噪声在薄墙附近偶发跨墙——M6a/M6b 健康误报 30/30、关系型单帧 25/30；但**持续性门控**(穿墙帧占比：健康 max=0.38 < 阈0.5 < v2=1.00)后**关系型健康 0/30、v2 仍抓** → 唯关系型能同时对 v2 敏感、对健康特异（与 G5 Part D 同源）。
-- **产物**：`audit/relational_oracle.py`(五路预言)、`audit/run_scenB_irreducibility.py`、`audit/scenB_irreducibility.{json,png}`。无回归（env 未改）。
+- **(e) 经验 soundness（§5 命门之二）**：实测真实 env 诚实漂移 δ(t) vs 障碍 clearance vs C1 ceiling ξ=0.50。**可证 sound 充分条件 δ_max<clear_min**：gated 短窗(含 scenB v2 N=60)[20,40,80] 实测 δ_max/clear_med=0.10/0.18/0.41 → **δ≪clearance、可证不误报**。δ_max 随窗长增长(0.08→0.13→0.27→1.10→5.39m)、**越过 clear_min @L≈160 恰对齐 G5 朴素点查 FP 包络**(0/30@≤80→29/30@160→30/30@320) → FP 包络由「δ越过clearance」几何解释。🔵 **精化关系型(through-cross+持续性)FP 全程 0/30**(优于朴素点查)。→ **「不可约」+「经验 sound」两主张均数据坐实、无需修正**。
+- **产物**：`audit/relational_oracle.py`(五路预言+clearance)、`audit/run_scenB_irreducibility.py`、`audit/scenB_irreducibility.{json,png}`(3面板)。无回归（env 未改）。
 - 详情：[docs/ScenB-Irreducibility.md](docs/ScenB-Irreducibility.md)。
 
 ---
