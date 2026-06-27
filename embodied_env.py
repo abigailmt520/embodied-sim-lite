@@ -638,12 +638,13 @@ class EmbodiedNavEnv(gym.Env):
     # ------------------------------------------------------------------
     # F4 矩形碰撞（Phase2）：圆-AABB 穿透解析 + 推出 + 速度回弹 + 碰撞账本
     # ------------------------------------------------------------------
-    def _circle_aabb_overlap(self, pos):
-        """返回 (max_overlap, push_vector)：圆心 pos 对所有墙 AABB 的最大穿透与推出位移（单墙最近点法）。"""
+    def _circle_aabb_overlap(self, pos, walls=None):
+        """返回 (max_overlap, push_vector)：圆心 pos 对墙 AABB 的最大穿透与推出位移（单墙最近点法）。
+        walls=None 取 self.walls；可传子集（碰撞检测层「穿墙幽灵」故障会传剔除幽灵墙的子集）。"""
         r = self.ROBOT_RADIUS
         max_pen = 0.0
         push = np.zeros(2)
-        for wx1, wx2, wy1, wy2 in self.walls:
+        for wx1, wx2, wy1, wy2 in (self.walls if walls is None else walls):
             cx = min(max(pos[0], wx1), wx2)      # AABB 上离圆心最近点
             cy = min(max(pos[1], wy1), wy2)
             dx, dy = pos[0] - cx, pos[1] - cy
@@ -685,13 +686,18 @@ class EmbodiedNavEnv(gym.Env):
         e_eff = f.get("bounce_eff", self.BOUNCE)     # CF-1：>1 增能
         skip_pushout = f.get("skip_pushout", False)  # CF-2
         phantom = f.get("phantom_contact", False)    # CF-3
+        # WP「穿墙幽灵」（Phase4 耦合压测）：碰撞检测层剔除指定墙索引 → 机器人「合法地」穿过该墙
+        #   （不碰撞、动量守恒、能量自洽，账本 penetration 仍 0）。真值真穿墙，但物理账本看不到。
+        phantom_walls = f.get("phantom_walls", None)
+        active_walls = (self.walls if not phantom_walls
+                        else [w for i, w in enumerate(self.walls) if i not in set(phantom_walls)])
 
         I_decl = self.INERTIA_COEF * self.MASS
         ke_before = 0.5 * self.MASS * self.v_act ** 2 + 0.5 * I_decl * self.w_act ** 2
 
         contact = False
         for _ in range(2):                            # 2 次迭代解角落/窄缝（old:645）
-            pen, push = self._circle_aabb_overlap(self.pos)
+            pen, push = self._circle_aabb_overlap(self.pos, active_walls)   # 幽灵墙不参与检测
             if pen > 0.0:
                 contact = True
                 if not skip_pushout:
@@ -707,7 +713,7 @@ class EmbodiedNavEnv(gym.Env):
             self.last_dE += (ke_after - ke_before)          # 把碰撞 KE 变化并入本 step ΔE
             self.last_E_contact_act = ke_before - ke_after  # 实际（CF-1 使其<0）
             self.last_E_contact_decl = (1.0 - self.BOUNCE ** 2) * ke_before  # 声称（按 class BOUNCE）
-            self.last_penetration = self._circle_aabb_overlap(self.pos)[0]   # 解算后残余穿透（CF-2 >0）
+            self.last_penetration = self._circle_aabb_overlap(self.pos, active_walls)[0]  # 残余穿透
         return contact
 
     # ------------------------------------------------------------------
