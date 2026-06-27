@@ -3,7 +3,7 @@
 > **单一累积文档**：每个平台迭代任务都更新此处。记录各 Phase 的设计决策/实现/验证（真实数字），
 > 以及**当前平台状态**（分支、权重、能力、局限）。目的：平台演进可追溯，未来接手者/AI 不必重新逆向。
 > 🔴 红线：master `7b54625`（已投稿论文版）**永久冻结**；所有迭代在 dev 分支；论文权重不覆盖。
-> 最后更新：2026-06-26（Phase1b 完成）
+> 最后更新：2026-06-26（Phase1c 完成）
 
 ---
 
@@ -22,7 +22,8 @@
 | `ppo_embodied_agent.pth` | 🔒论文版 · 零惯性运动学 · obs26/act[v,w] | 成功84%/碰撞12%/超时4% | master |
 | `ppo_embodied_agent_dyn.pth` | A-mode 目标速度跟踪动力学 · obs26/act[v,w] | 92%/8%/0% | dev/stage1 |
 | `ppo_embodied_agent_bmode.pth` | B-mode 力控(τ=4×步长) · obs28/act[f_l,f_r] | 76%/16%/8% | dev/stage2 |
-| `ppo_embodied_agent_bmode_gamed.pth` | B-mode + G-1 故障环境训练（gaming 实验） | 见 §3.2 | dev/stage2 |
+| `ppo_embodied_agent_bmode_gamed.pth` | B-mode + G-1 故障环境训练（**被动 gaming，涌现**） | Phase1b §2.2 | dev/stage2 |
+| `ppo_embodied_agent_g2gamed.pth` | B-mode + G-2 故障环境训练（**唯一习得 gaming，未涌现**） | Phase1c §2.2 | dev/stage2 |
 
 ### 1.3 当前能力矩阵
 | 维度 | 状态 |
@@ -38,7 +39,7 @@
 
 ### 1.4 已知局限
 - **A-mode 动力学温和**（τ≈0.055s≪步长、近马尔可夫）→ 旧策略零损迁移、无涌现空间。**B-mode（τ=4×步长）才有有意义惯性 + 涌现 gaming**。
-- **涌现 gaming 当前为被动利用**（G-1 故障与"求快"目标对齐，honest 智能体也会白嫖）；强"唯一习得"gaming 需 G-2（奖励次优行为的故障）。
+- **涌现 gaming 存在「可发现性-特异性」内在权衡**（Phase1b/1c 实证）：G-1（对齐型，触发于高速）**涌现易但 honest 也白嫖29%**（低特异性）；G-2（反常型，触发于双轮idle）**honest 0%白嫖（高特异性）但 RL 未自发涌现**（exploit 偏离奖励梯度）。能量审计**两者都能在违反发生时判红**（G-2 脚本证明）；难点在「智能体是否表现出违反」。强唯一习得 gaming 需 reward-shaping/课程/甜区 exploit。
 - 能量/物理审计经 get_render_state 消费账本，**沿用契约信任根**（契约=信任边界，见 linchpin 复核）；契约-内核对账(q 类)未做。
 - 未做：F4 矩形碰撞 / F2 迷宫 / F3 动态障碍 / B-mode 之外的丰富环境层；未接 MuJoCo。
 
@@ -67,6 +68,15 @@
   **结果**：boosted 环境下智能体系统性越物理上限（23~29%、顶速越限 33%）、表观性能虚高（成功 +7~10%、步数 -20%），**能量审计判红并定位**（gamed@boosted EC1+EC3 红）。**诚实标注**：此 gaming 为被动利用（honest 也白嫖），非唯一习得；强 gaming 需 G-2。
 - 详情：[docs/Phase1b-Bmode-Gaming.md](docs/Phase1b-Bmode-Gaming.md)。
 
+### Phase1c · G-2 唯一习得 gaming（dev/stage2-bmode, 本次）
+- **决策**：设计 G-2「idle-coast」故障——仅当**双轮都近零作动（啥也不做）**滑行才白拿大额前向力。
+  实测诚实智能体双轮同时 idle 占比=0% → 唯有学会该**反常行为**才获利（高特异性）。
+- **🔴 真实负结果（如实报告，INV-E）**：G-2 环境训练的 g2gamed **未涌现** idle-coast（idle 0.0%、性能反降 70% vs 83%）。
+  三对照：① 未学会反常行为 ❌；② **honest@g2boosted 0% 白嫖 ✅**（对照 G-1 的 29%，高特异性达成）；
+  ③ 审计在该行为发生时**确判红**（脚本化 idle-coast：EC1 残差 0.673J + EC2 + EC3，顶速 2.0）——失败纯在 RL 发现侧、非审计侧。
+- **科学发现**：**可发现性-特异性权衡**——对齐型 exploit 涌现易但归因难；反常型 exploit 归因清晰但 RL 难自发发现（off-gradient）。
+- 详情：[docs/Phase1c-G2-UniqueGaming.md](docs/Phase1c-G2-UniqueGaming.md)。
+
 ---
 
 ## 3. 关键复现命令
@@ -79,9 +89,12 @@ EMBODIED_CONTROL_MODE=B EMBODIED_MODEL_PATH=ppo_embodied_agent_bmode.pth python 
 # 物理能量审计红绿对照（A 或 B）
 EMBODIED_AUDIT_MODE=A python audit/run_physics_audit.py   # → energy_redgreen_matrix_amode.png
 EMBODIED_AUDIT_MODE=B python audit/run_physics_audit.py   # → energy_redgreen_matrix_bmode.png
-# gaming 智能体训练 + 实验
+# G-1 被动 gaming 训练 + 实验
 EMBODIED_CONTROL_MODE=B EMBODIED_BOOST_FORCE=1.5 EMBODIED_MODEL_PATH=ppo_embodied_agent_bmode_gamed.pth python train_agent.py
 python audit/run_gaming_experiment.py     # → gaming_compare.png, gaming_summary.json
+# G-2 唯一习得 gaming 训练 + 实验
+EMBODIED_CONTROL_MODE=B EMBODIED_G2_FORCE=6.0 EMBODIED_MODEL_PATH=ppo_embodied_agent_g2gamed.pth python train_agent.py
+python audit/run_g2_gaming_experiment.py  # → g2_gaming_compare.png, g2_gaming_summary.json
 # 契约层回归
 python audit/run_action1.py
 ```
@@ -89,6 +102,6 @@ python audit/run_action1.py
 ---
 
 ## 4. 下一步候选（待 Abi/Opus 定夺）
-- G-2 唯一习得式强 gaming（奖励次优行为的故障）。
+- 桥接「可发现性-特异性权衡」：reward-shaping/课程学习引导 G-2 涌现，或换更强探索（RND/model-based）。
 - 丰富环境层：F4 矩形碰撞（撞即terminate vs bounce 可配）、F2 40×40 迷宫、F3 动态障碍。
 - 契约-内核对账（q 类，破信任根盲区）。

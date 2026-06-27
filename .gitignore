@@ -147,10 +147,12 @@ cython_debug/
 !ppo_embodied_agent_dyn.pth        # dev/stage1-dynamics：A-mode 动力学版权重
 !ppo_embodied_agent_bmode.pth      # dev/stage2-bmode：B-mode 力控版权重
 !ppo_embodied_agent_bmode_gamed.pth  # dev/stage2-bmode：G-1 故障环境训练（涌现 gaming 实验）
+!ppo_embodied_agent_g2gamed.pth      # dev/stage2-bmode：G-2 故障环境训练（唯一习得 gaming 实验）
 *.zip
 train_dyn.log
 train_bmode.log
 train_gamed.log
+train_g2.log
 checkpoints/
 tb_embodied/
 # 可由脚本复现的运行产物（不入库）
