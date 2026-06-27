@@ -3,7 +3,7 @@
 > **单一累积文档**：每个平台迭代任务都更新此处。记录各 Phase 的设计决策/实现/验证（真实数字），
 > 以及**当前平台状态**（分支、权重、能力、局限）。目的：平台演进可追溯，未来接手者/AI 不必重新逆向。
 > 🔴 红线：master `7b54625`（已投稿论文版）**永久冻结**；所有迭代在 dev 分支；论文权重不覆盖。
-> 最后更新：2026-06-26（Phase2 完成）
+> 最后更新：2026-06-26（Phase3 完成）
 
 ---
 
@@ -16,6 +16,7 @@
 | `dev/stage1-dynamics` | Phase1a：动力学核 + A-mode + 能量审计 EC1-EC3 + 5 注入器 | master `7b54625` |
 | `dev/stage2-bmode` | Phase1b/1c：B-mode 力控 + G-1/G-2 gaming 实验 | Phase1a `432d24b` |
 | `dev/stage3-maze` | Phase2：F4 矩形碰撞 + F2 40×40 迷宫 + 碰撞故障审计 | Phase1c `5e2af1c` |
+| `dev/stage4-mi-leakage` | Phase3：契约层互信息泄漏审计（CI，C1 原理化泛化） | Phase2 `3cc426e` |
 
 ### 1.2 权重文件（各自配置，互不覆盖）
 | 文件 | 配置 | 性能(N=25/30 固定种子) | 所在分支 |
@@ -32,7 +33,7 @@
 |---|---|
 | **控制模式** | A=目标速度跟踪(P 控制器)；B=原始轮力力控。共享动力学核（力→牛顿+黏性阻尼→N_SUB 半隐式积分）。`ENABLE_DYNAMICS=False` 退回零惯性运动学（论文版行为） |
 | **物理保真度** | 简化动力学（质量/惯量/黏性阻尼）+ **F4 矩形碰撞**（圆-AABB 穿透推出+回弹 e=0.5）；能量+碰撞账本精确电报（清洁残差 ~1e-16 J）。**未含**刚体接触动力学 |
-| **契约层审计** | C1 真分叉 / C2 帧序单调 / C3 断流即冻结（**未改、回归通过**） |
+| **契约层审计** | C1 真分叉 / C2 帧序单调 / C3 断流即冻结（**未改、回归通过**）；**+ CI 互信息泄漏审计**（I(Δodom;Δtruth)≤噪声预算界，C1 原理化泛化，可估区 slip≈0.3 抓 L-1/L-2/L-3） |
 | **物理层审计** | EC1 能量预算 / EC2 无凭空能量 / EC3 执行器上限 / **EC4 碰撞非负 / EC5 非穿透**。8 注入器 P-1..P-5 + CF-1..CF-3 自证抓假（清洁绿 + 各判红） |
 | **里程计** | 真分叉 odom（吃实际速度 v_act + 打滑漂移），C1 保留；碰撞不修正 odom（守"只漂移不校正"） |
 | **地图** | `random_circle` 10×10 随机圆（默认，零回归）/ `maze` **40×40 手工墙体迷宫**（19 AABB，射线-AABB 雷达 + 圆-矩形碰撞）。**未含**动态障碍 |
@@ -44,6 +45,7 @@
 - **A-mode 动力学温和**（τ≈0.055s≪步长、近马尔可夫）→ 旧策略零损迁移、无涌现空间。**B-mode（τ=4×步长）才有有意义惯性 + 涌现 gaming**。
 - **涌现 gaming 存在「可发现性-特异性」内在权衡**（Phase1b/1c 实证）：G-1（对齐型，触发于高速）**涌现易但 honest 也白嫖29%**（低特异性）；G-2（反常型，触发于双轮idle）**honest 0%白嫖（高特异性）但 RL 未自发涌现**（exploit 偏离奖励梯度）。能量审计**两者都能在违反发生时判红**（G-2 脚本证明）；难点在「智能体是否表现出违反」。强唯一习得 gaming 需 reward-shaping/课程/甜区 exploit。
 - 能量/物理审计经 get_render_state 消费账本，**沿用契约信任根**（契约=信任边界，见 linchpin 复核）；契约-内核对账(q 类)未做。
+- **CI 互信息审计在高信噪比（小 slip）退化**：KSG 估计对近确定性通道饱和，部署 slip=0.05（odom 很准）下仅可靠抓全泄漏 L-1，L-2/L-3 漏；此区 C1 幅值检更实用。CI 在可估区（slip≈0.3）干净定量。二者互补。
 - 未做：F4 矩形碰撞 / F2 迷宫 / F3 动态障碍 / B-mode 之外的丰富环境层；未接 MuJoCo。
 
 ---
@@ -88,6 +90,14 @@
 - **机会性**：honest maze 含碰撞轨迹能量审计 🟢GREEN——无自然碰撞 gaming（诚实回弹只耗能、无甜区 exploit），不强凑。
 - 详情：[docs/Phase2-Maze-Collision.md](docs/Phase2-Maze-Collision.md)。
 
+### Phase3 · 契约层互信息泄漏审计 CI（dev/stage4-mi-leakage, 本次，纯审计层新增）
+- **决策**：把 C1「误差太小即疑」升级为原理化「I(report;truth) ≤ 噪声预算界」，与物理 EC1 守恒残差对称（双态 formalization 收尾）。KSG k-NN 估 MI、再加噪 MC 操作化噪声预算界、滑窗+持续判据。
+- **🔴 修正 Opus 原设计坑**：绝对位置 MI 不可用（dead-reckoning 累积，由轨迹相关性主导）→ 改**逐步增量 MI**（无记忆通道）；闭式 ½log(1+SNR) 对乘性 slip 噪声只近似 → 改再加噪 MC 预算界。
+- **验证（slip=0.30 可估区）**：清洁绿（I=2.49≤界2.28+余量）；L-1/L-2/L-3 真实 MI 4.04/3.25/3.07 均超界 → 3/3 判红。
+- **与 C1 对照**：C1 仅抓全泄漏 L-1；**CI 还抓 C1 漏的 L-2(部分泄漏仍漂移)/L-3(大误差但确定)** = C1 的原理化定量泛化。
+- **🔴 可靠性如实报告**：KSG 对高 SNR 饱和 → 平台部署 slip=0.05（odom 很准、界~3.3nats 逼近估计上限）下 L-1 仍抓、**L-2/L-3 漏**；此区 C1 幅值检更实用。CI 价值在可估区的定量 + 抓 C1 漏项，**与 C1 互补而非全面更强**。
+- 详情：[docs/Phase3-MI-Leakage.md](docs/Phase3-MI-Leakage.md)。
+
 ---
 
 ## 3. 关键复现命令
@@ -109,6 +119,8 @@ python audit/run_g2_gaming_experiment.py  # → g2_gaming_compare.png, g2_gaming
 # 迷宫(maze) + 矩形碰撞 训练 + 碰撞保真度审计
 EMBODIED_CONTROL_MODE=A EMBODIED_MAP_TYPE=maze EMBODIED_MODEL_PATH=ppo_embodied_agent_maze.pth python train_agent.py
 python audit/run_collision_audit.py       # → collision_redgreen_matrix.png（CF-1/2/3 红绿对照）
+# 契约层互信息泄漏审计 CI（+ 与 C1 对照）
+python audit/run_leakage_audit.py         # → leakage_compare.png（slip 0.30/0.05 双区）
 # 契约层回归
 python audit/run_action1.py
 ```
