@@ -1,45 +1,17 @@
 {
   "scenario_A": {
-    "physics_passed": true,
+    "physics_passed": false,
     "contract_passed": true,
-    "truth_vs_map_ok": false,
-    "odom_vs_map_ok": false,
-    "verdict": "PHYSICS_INTERNAL",
-    "truth_pen_locator": {
-      "first_illegal_frame": 20,
-      "n_illegal_frames": 18,
-      "max_penetration_m": 0.2,
-      "pos": [
-        28.063,
-        20.0
-      ]
-    },
-    "odom_pen_locator": {
-      "first_illegal_frame": 19,
-      "n_illegal_frames": 17,
-      "max_penetration_m": 0.2,
-      "pos": [
-        28.057,
-        20.0
-      ]
-    }
+    "ec5_prime_ok": false,
+    "joint_ok": false,
+    "verdict": "PHYSICS_INTERNAL"
   },
   "scenario_B": {
     "physics_passed": true,
     "contract_passed": true,
-    "truth_vs_map_ok": true,
-    "odom_vs_map_ok": false,
-    "verdict": "TRUE_COUPLING",
-    "truth_pen_locator": null,
-    "odom_pen_locator": {
-      "first_illegal_frame": 13,
-      "n_illegal_frames": 12,
-      "max_penetration_m": 0.2,
-      "pos": [
-        28.06,
-        20.0
-      ]
-    }
+    "ec5_prime_ok": true,
+    "joint_ok": false,
+    "verdict": "TRUE_COUPLING"
   },
-  "true_coupling_constructible": true
+  "criteria_separated": true
 }

@@ -28,11 +28,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from embodied_env import EmbodiedNavEnv                                   # noqa: E402
-from energy_audit import audit_session as energy_audit                   # noqa: E402
-from integrity_audit import (check_truth_odom_fork, check_seq_integrity,  # noqa: E402
-                             check_feed_liveness)
-from leakage_audit import ci_audit                                       # noqa: E402
-from joint_audit import coupling_verdict, traj_vs_map                    # noqa: E402
+from audit_suite import run_suite, format_suite, coupling_label          # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 WALLS = EmbodiedNavEnv.MAZE_WALLS
@@ -48,38 +44,17 @@ def _energy_row(env):
             "penetration": e["penetration"], "v_act": st["v_act"], "w_act": st["w_act"]}
 
 
-def _c1c2c3_session(truth, odom):
-    return [{"recv_t": float(i), "seq": i, "step": i,
-             "truth": {"x": float(truth[i][0]), "y": float(truth[i][1]), "theta": 0.0},
-             "odom": {"x": float(odom[i][0]), "y": float(odom[i][1]), "theta": 0.0},
-             "terminated": False, "truncated": False, "link_status": "online"}
-            for i in range(len(truth))]
-
-
 def run_layers(truth, odom, eledger, slip, tag):
-    """三层独立审计 + 联合判定，返回各层 verdict。"""
-    # 物理层 EC1-EC5
-    phys = energy_audit(eledger, v_max=EmbodiedNavEnv.V_PHYS_MAX,
-                        w_max=EmbodiedNavEnv.W_PHYS_MAX, with_collision=True)
-    # 契约层 C1/C2/C3 + CI
-    sess = _c1c2c3_session(truth, odom)
-    c1 = check_truth_odom_fork(sess); c2 = check_seq_integrity(sess); c3 = check_feed_liveness(sess)
-    ci = ci_audit(np.asarray(truth), np.asarray(odom), slip)
-    contract_ok = c1["ok"] and c2["ok"] and c3["ok"] and ci["ok"]
-    # 联合 report×physics
-    tv, ov, verdict = coupling_verdict(truth, odom, WALLS, RADIUS)
+    """跑常驻三层套件（含物理层 EC5'），返回各层 verdict + 耦合判定。"""
+    res = run_suite(truth, odom, eledger, WALLS, RADIUS, slip,
+                    EmbodiedNavEnv.V_PHYS_MAX, EmbodiedNavEnv.W_PHYS_MAX)
+    verdict = coupling_label(res)
     print(f"\n{'='*78}\n  {tag}\n{'='*78}")
-    print(f"  物理层 EC1-EC5      : {'🟢 全过' if phys['passed'] else '🔴 有红'}"
-          + ("" if phys["passed"] else "  " + ",".join(c["check"] for c in phys["checks"] if not c["ok"])))
-    print(f"  契约层 C1/C2/C3+CI  : {'🟢 全过' if contract_ok else '🔴 有红'}"
-          f"  (C1 {'🟢' if c1['ok'] else '🔴'} C2 {'🟢' if c2['ok'] else '🔴'} "
-          f"C3 {'🟢' if c3['ok'] else '🔴'} CI {'🟢' if ci['ok'] else '🔴'})")
-    print(f"  联合 truth_vs_map   : {'🟢 真值合法' if tv['ok'] else '🔴 真值穿墙'}")
-    print(f"  联合 odom_vs_map    : {'🟢 上报合法' if ov['ok'] else '🔴 上报穿墙'}")
-    print(f"  ── 联合判定 ──────► {verdict}")
-    return {"physics_passed": phys["passed"], "contract_passed": contract_ok,
-            "truth_vs_map_ok": tv["ok"], "odom_vs_map_ok": ov["ok"], "verdict": verdict,
-            "truth_pen_locator": tv["locator"], "odom_pen_locator": ov["locator"]}
+    print(format_suite(res))
+    print(f"  ── 耦合判定 ──────► {verdict}")
+    return {"physics_passed": res["physics"]["ok"], "contract_passed": res["contract"]["ok"],
+            "ec5_prime_ok": res["physics"]["ec5_prime_ok"], "joint_ok": res["joint"]["ok"],
+            "verdict": verdict}
 
 
 # ====================================================================
@@ -121,30 +96,34 @@ def scenario_b():
 
 
 def main():
-    print("Phase4 · 双态耦合压测（report × physics）—— 反自欺纪律压测核心论点")
+    print("Phase4b · 双态耦合压测（含物理层 EC5' + 常驻联合层）—— 判据分离收尾")
     ta, oa, la_led = scenario_a()
     rA = run_layers(ta, oa, la_led, 0.05, "场景 A · 字面穿墙幽灵（真值真穿墙）")
-    if rA["verdict"] == "PHYSICS_INTERNAL":
-        print("  ► 如实判定：**非真耦合**。truth_vs_map 红 = 真值真穿墙 → 物理内(真值 vs 声称地图)独力可抓；")
-        print("    当前 EC5 漏它仅因「信任账本 penetration（幽灵墙不在碰撞系统→报0）」= EC5 实现缺口，非耦合。")
+    a_ok = (rA["verdict"] == "PHYSICS_INTERNAL") and (not rA["ec5_prime_ok"]) and (not rA["physics_passed"])
+    if a_ok:
+        print("  ► 如实判定：**非真耦合**。EC5'(物理内真值-vs-声称地图)单层判红 → 物理层独力可抓，")
+        print("    不需 joint。坐实「场景A=单层缺口（已由 EC5' 补上）、非耦合」。")
 
     tb, ob, lb_led = scenario_b()
     rB = run_layers(tb, ob, lb_led, 0.05, "场景 B · 真耦合变体（真值诚实，odom 伪造穿墙）")
-    if rB["verdict"] == "TRUE_COUPLING":
-        print("  ► 如实判定：**真耦合**。truth_vs_map 绿（真值合法）+ 物理层过 + 契约层过，")
-        print("    唯 odom_vs_map(report×physics) 红 → 既非物理内、也非契约自洽可抓，唯联合可抓。")
+    # 真耦合充要：物理层(含EC5')过 + 契约层过 + EC5' 绿(没替 joint 充数) + 唯 joint 红
+    b_ok = (rB["verdict"] == "TRUE_COUPLING" and rB["physics_passed"] and rB["contract_passed"]
+            and rB["ec5_prime_ok"] and (not rB["joint_ok"]))
+    if b_ok:
+        print("  ► 如实判定：**真耦合**。物理层(含 EC5')🟢 + 契约层 🟢 + **EC5' 绿（真值合法、未替 joint 充数）**，")
+        print("    唯 joint(report×physics) 红 → 唯联合可抓。坐实「场景B=真耦合、唯 joint 抓」。")
 
-    print(f"\n{'='*78}\n  结论\n{'='*78}")
-    print(f"  场景A 判定: {rA['verdict']}  (物理过={rA['physics_passed']}, 契约过={rA['contract_passed']})")
-    print(f"  场景B 判定: {rB['verdict']}  (物理过={rB['physics_passed']}, 契约过={rB['contract_passed']})")
-    true_coupling_exists = (rB["verdict"] == "TRUE_COUPLING")
-    print(f"\n  「两层各自过、唯联合抓」的真耦合自欺：{'✅ 可构造（场景B）' if true_coupling_exists else '⚠️ 未能构造'}")
-    print( "  「字面穿墙幽灵」：物理内(truth_vs_map)可抓 → 非真耦合（EC5 缺口），如实标注、未硬凑。")
+    print(f"\n{'='*78}\n  结论（判据分离、各司其职）\n{'='*78}")
+    print(f"  场景A: {rA['verdict']}  EC5'={'🔴' if not rA['ec5_prime_ok'] else '🟢'} joint={'🔴' if not rA['joint_ok'] else '🟢'}"
+          f"  → 物理层 EC5' 单层抓（非耦合）")
+    print(f"  场景B: {rB['verdict']}  EC5'={'🟢' if rB['ec5_prime_ok'] else '🔴'} joint={'🔴' if not rB['joint_ok'] else '🟢'}"
+          f"  → 唯 joint 抓（真耦合，EC5' 未充数）")
+    clean = a_ok and b_ok
+    print(f"\n  判据分离干净：{'✅ 场景A=EC5'+chr(39)+'单层抓、场景B=唯joint抓' if clean else '⚠️ 见上分析'}")
 
-    json.dump({"scenario_A": rA, "scenario_B": rB,
-               "true_coupling_constructible": bool(true_coupling_exists)},
+    json.dump({"scenario_A": rA, "scenario_B": rB, "criteria_separated": bool(clean)},
               open(os.path.join(HERE, "coupling_summary.json"), "w"), indent=2, ensure_ascii=False)
-    return true_coupling_exists
+    return clean
 
 
 if __name__ == "__main__":

@@ -57,6 +57,31 @@ def traj_vs_map(traj, walls, radius, label="traj"):
             "detail": f"{label} 轨迹全程在声称地图内合法（无落墙）", "locator": None}
 
 
+def ec5_prime(truth_traj, walls, radius):
+    """EC5'（物理层）：物理内「真值-vs-声称地图几何」重算非穿透。
+
+    **不信任账本的 penetration 字段**——直接用真值位置对照**声称全地图**几何独立判定。
+    故能抓「碰撞检测剔除墙（幽灵墙）使账本 penetration=0」的 EC5 缺口（真值真在墙内）。
+    纯物理内检查（真值与地图皆物理侧），不需上报通道。
+    """
+    r = traj_vs_map(truth_traj, walls, radius, "truth")
+    r["check"] = "EC5P_TRUTH_MAP"
+    r["desc"] = "EC5'：真值位置是否未落入声称地图墙内（物理内几何重算，不信任账本）"
+    return r
+
+
+def joint_report_vs_map(odom_traj, walls, radius):
+    """联合层（report×physics）：上报轨迹（odom）-vs-声称地图几何 非穿透。
+
+    odom 来自契约、地图来自物理 → 跨态检查。抓「真值合法但上报伪造穿墙航迹」的真耦合
+    （此类既非物理内（真值合法 EC5' 绿）、也非契约自洽（odom 自洽 C1-3/CI 绿）可抓）。
+    """
+    r = traj_vs_map(odom_traj, walls, radius, "odom")
+    r["check"] = "JOINT_ODOM_MAP"
+    r["desc"] = "联合：上报(odom)位置是否未落入声称地图墙内（report×physics 跨态）"
+    return r
+
+
 def coupling_verdict(truth_traj, odom_traj, walls, radius):
     """耦合压测核心判定：返回 (truth_vs_map, odom_vs_map, verdict_str)。
 

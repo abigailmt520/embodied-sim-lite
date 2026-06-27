@@ -3,7 +3,7 @@
 > **单一累积文档**：每个平台迭代任务都更新此处。记录各 Phase 的设计决策/实现/验证（真实数字），
 > 以及**当前平台状态**（分支、权重、能力、局限）。目的：平台演进可追溯，未来接手者/AI 不必重新逆向。
 > 🔴 红线：master `7b54625`（已投稿论文版）**永久冻结**；所有迭代在 dev 分支；论文权重不覆盖。
-> 最后更新：2026-06-27（Phase4 完成）
+> 最后更新：2026-06-27（Phase4b 完成）
 
 ---
 
@@ -18,6 +18,7 @@
 | `dev/stage3-maze` | Phase2：F4 矩形碰撞 + F2 40×40 迷宫 + 碰撞故障审计 | Phase1c `5e2af1c` |
 | `dev/stage4-mi-leakage` | Phase3：契约层互信息泄漏审计（CI，C1 原理化泛化） | Phase2 `3cc426e` |
 | `dev/stage5-coupling` | Phase4：双态耦合压测（report×physics 联合审计 + 真/假耦合判据） | Phase3 `af81e14` |
+| `dev/stage6-ec5prime` | Phase4b：EC5'（物理内真值-vs-地图）+ 常驻三层套件（判据分离收尾） | Phase4 `9f188b1` |
 
 ### 1.2 权重文件（各自配置，互不覆盖）
 | 文件 | 配置 | 性能(N=25/30 固定种子) | 所在分支 |
@@ -35,8 +36,8 @@
 | **控制模式** | A=目标速度跟踪(P 控制器)；B=原始轮力力控。共享动力学核（力→牛顿+黏性阻尼→N_SUB 半隐式积分）。`ENABLE_DYNAMICS=False` 退回零惯性运动学（论文版行为） |
 | **物理保真度** | 简化动力学（质量/惯量/黏性阻尼）+ **F4 矩形碰撞**（圆-AABB 穿透推出+回弹 e=0.5）；能量+碰撞账本精确电报（清洁残差 ~1e-16 J）。**未含**刚体接触动力学 |
 | **契约层审计** | C1 真分叉 / C2 帧序单调 / C3 断流即冻结（**未改、回归通过**）；**+ CI 互信息泄漏审计**（I(Δodom;Δtruth)≤噪声预算界，C1 原理化泛化，可估区 slip≈0.3 抓 L-1/L-2/L-3） |
-| **物理层审计** | EC1 能量预算 / EC2 无凭空能量 / EC3 执行器上限 / **EC4 碰撞非负 / EC5 非穿透**。8 注入器 P-1..P-5 + CF-1..CF-3 自证抓假（清洁绿 + 各判红） |
-| **联合审计（report×physics）** | `joint_audit`：上报轨迹 vs 声称物理地图 非穿透。**真耦合判据**：truth_vs_map 绿 ∧ odom_vs_map 红（唯联合可抓）。证明双态耦合非空（Phase4） |
+| **物理层审计** | EC1 能量预算 / EC2 无凭空能量 / EC3 执行器上限 / EC4 碰撞非负 / EC5 非穿透(账本) / **EC5' 真值-vs-地图(物理内几何重算，不信任账本)**。注入器 P-1..P-5 + CF-1..CF-3（EC5' 零误报，仅真值真穿墙时红）|
+| **联合审计（report×physics 常驻）** | `audit_suite` + `joint_audit`：JOINT odom-vs-声称地图。**判据分离**：EC5' 红⇒物理内单层可抓(非耦合)；EC5' 绿 ∧ JOINT 红⇒真耦合（唯联合可抓）。三层常驻套件 `run_suite`（Phase4/4b）|
 | **里程计** | 真分叉 odom（吃实际速度 v_act + 打滑漂移），C1 保留；碰撞不修正 odom（守"只漂移不校正"） |
 | **地图** | `random_circle` 10×10 随机圆（默认，零回归）/ `maze` **40×40 手工墙体迷宫**（19 AABB，射线-AABB 雷达 + 圆-矩形碰撞）。**未含**动态障碍 |
 | **碰撞语义** | `terminate`（撞即终止，论文版）/ `bounce`（穿透推出+回弹+每步接触惩罚 R_CONTACT、不终止，迷宫导航用） |
@@ -109,6 +110,14 @@
 - **发现**：真耦合的本质是「自欺落在 report 而 physics 真值诚实」；朴素穿墙幽灵是 EC5 缺口冒充耦合，诚实判据把二者分开——避免把「审计缺口」误当「耦合论据」。
 - 详情：[docs/Phase4-Coupling-Stress-Test.md](docs/Phase4-Coupling-Stress-Test.md)。
 
+### Phase4b · EC5'（物理内真值-vs-地图）+ 常驻三层套件（dev/stage6-ec5prime, 本次，纯审计层）
+- **决策**：补 Phase4 自指的 EC5 缺口——EC5'（`joint_audit.ec5_prime`）不信任账本 penetration、直接用真值对照声称全地图几何重算；joint_audit 固化进常驻三层套件 `audit_suite.run_suite`。
+- **场景 A（真值真穿墙）**：EC1-EC5 🟢 但 **EC5' 🔴**（真值落墙 0.200m）→ **PHYSICS_INTERNAL**：物理层单层抓 → 坐实「场景 A=单层缺口（已补 EC5'）、非耦合」。
+- **场景 B（真值合法、odom 伪造穿墙）**：物理层(含 EC5')🟢 + 契约 🟢 + **EC5' 🟢（未替 joint 充数）**，唯 **JOINT 🔴** → **TRUE_COUPLING**：坐实「场景 B=真耦合、唯 joint 抓」。
+- **🔴 诚实判据**：EC5' **零误报**（30 回合健康 maze 0/30；CF-2/幽灵墙真值真穿墙才红=真违反非误报）；EC5' 未替 joint 充数（场景 B EC5' 绿）；判据分离干净。**未调参硬压。**
+- 无回归（CF 3/3、P 5/5、C1-3、CI 3/3）；env 未改。
+- 详情：[docs/Phase4b-EC5prime-Suite.md](docs/Phase4b-EC5prime-Suite.md)。
+
 ---
 
 ## 3. 关键复现命令
@@ -141,7 +150,7 @@ python audit/run_action1.py
 ---
 
 ## 4. 下一步候选（待 Abi/Opus 定夺）
-- 补 EC5'（物理内真值-vs-声称地图重算，堵 Phase4 场景 A 的 EC5 信任账本缺口）；joint_audit 接入运行时管线。
+- 三层套件 `audit_suite` 接入 inference_server 运行时流（real-time 联合监控）。
 - F3 动态障碍（巡逻车，移动 AABB；可能提供碰撞/避让甜区 gaming substrate）。
 - 提升 maze 成功率：简化迷宫 / 课程学习 / B-mode 力控迷宫策略；前端渲染迷宫墙体（契约已导出 walls）。
 - 桥接「可发现性-特异性权衡」：reward-shaping/课程学习引导 G-2 涌现，或换更强探索（RND/model-based）。
