@@ -79,6 +79,49 @@ DESCRIPTIONS = {
     "P-5_mass_misreport": "实际半质量、账本声称质量→动能与预算不自洽（能量自洽破坏）",
 }
 
+# ====================================================================
+# 碰撞保真度自欺注入器（Phase2，藏 _resolve_wall_collisions 内部；需 maze + 撞墙才显形）
+# ====================================================================
+def inject_cf1_over_bounce(env):
+    """CF-1：回弹恢复系数 e>1（撞墙后 v 被放大）→ 碰撞凭空增能（破坏碰撞能量非负律 E_contact≥0）。"""
+    fault = {"mode": "CF-1_over_bounce", "bounce_eff": 1.3}
+    env.physics_fault = fault
+    return fault
+
+
+def inject_cf2_skip_pushout(env):
+    """CF-2：不做穿透推出（机器人留在墙内）却照常结算 → 破坏非穿透不变量（penetration>0）。"""
+    fault = {"mode": "CF-2_skip_pushout", "skip_pushout": True}
+    env.physics_fault = fault
+    return fault
+
+
+def inject_cf3_phantom_contact(env):
+    """CF-3：账本声称碰撞耗散(E_contact_decl>0)、实际不衰减速度 → 破坏能量账本自洽（碰撞版波将金村）。"""
+    fault = {"mode": "CF-3_phantom_contact", "phantom_contact": True}
+    env.physics_fault = fault
+    return fault
+
+
+COLLISION_INJECTORS = {
+    "CF-1_over_bounce": inject_cf1_over_bounce,
+    "CF-2_skip_pushout": inject_cf2_skip_pushout,
+    "CF-3_phantom_contact": inject_cf3_phantom_contact,
+}
+
+COLLISION_DESCRIPTIONS = {
+    "CF-1_over_bounce": "回弹e>1→碰撞增能（破坏碰撞能量非负律）",
+    "CF-2_skip_pushout": "不修正穿透却谎称已解算（破坏非穿透不变量）",
+    "CF-3_phantom_contact": "账本声称碰撞耗散、实际不衰减（碰撞版波将金村，破坏能量账本自洽）",
+}
+
+COLLISION_EXPECTED_CHECK = {
+    "CF-1_over_bounce": "EC4_COLLISION_NONNEG",   # 特征：碰撞凭空增能（E_contact_act<0）
+    "CF-2_skip_pushout": "EC5_NON_PENETRATION",   # 特征：解算后残余穿透>0
+    "CF-3_phantom_contact": "EC1_ENERGY_BUDGET",  # 特征：声称耗散却无实际损耗 → 预算残差
+}
+
+
 # 每个注入器「期望被判红」的能量审计检查项（特征检查；据实测守恒律破坏签名标定）
 # EC1 能量预算残差是「万能网」——5 类全被它抓（无漏网）；EC2/EC3 提供特异定位。
 EXPECTED_CHECK = {

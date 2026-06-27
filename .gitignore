@@ -148,16 +148,19 @@ cython_debug/
 !ppo_embodied_agent_bmode.pth      # dev/stage2-bmode：B-mode 力控版权重
 !ppo_embodied_agent_bmode_gamed.pth  # dev/stage2-bmode：G-1 故障环境训练（涌现 gaming 实验）
 !ppo_embodied_agent_g2gamed.pth      # dev/stage2-bmode：G-2 故障环境训练（唯一习得 gaming 实验）
+!ppo_embodied_agent_maze.pth         # dev/stage3-maze：40×40 迷宫 + 矩形碰撞策略
 *.zip
 train_dyn.log
 train_bmode.log
 train_gamed.log
 train_g2.log
+train_maze.log
 checkpoints/
 tb_embodied/
 # 可由脚本复现的运行产物（不入库）
 audit/sessions/
 audit/physics_sessions/
+audit/collision_sessions/
 audit/eval_episodes.csv
 audit/eval_summary.json
 audit/__pycache__/

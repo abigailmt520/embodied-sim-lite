@@ -20,6 +20,8 @@ Embodied-SimLite 轻量化具身智能孪生环境（标准 gymnasium.Env 封装
     - LiDAR：解析式「射线-圆」与「射线-墙」求交，无需逐像素扫描，单射线-单障碍亦为 O(1)。
 """
 
+import math
+
 import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
@@ -97,6 +99,26 @@ class EmbodiedNavEnv(gym.Env):
 
     MAX_STEPS = 500         # 单回合步数上限（用于 truncated）
 
+    # ====================== F4 矩形碰撞 + F2 迷宫（Phase2 丰富环境层）======================
+    # 地图后端：'random_circle'=10×10 随机圆（Phase0-1c 行为，默认，零回归）；
+    #           'maze'=40×40 手工墙体迷宫（AABB 墙 + 圆-矩形碰撞 + 射线-AABB 雷达）。
+    # 碰撞语义：'terminate'=撞即终止（论文版，默认）；'bounce'=穿透推出+速度衰减+每步接触惩罚、不终止。
+    BOUNCE        = 0.5     # 碰撞回弹恢复系数 e≤1：撞墙后 v_act←e·v_act（KE 掉到 e²，E_contact≥0 耗散）
+    R_CONTACT     = -5.0    # bounce 模式每接触步惩罚（替代 terminate 模式的 R_COLLISION 终止）
+    # 40×40 手工迷宫墙体（AABB: xmin,xmax,ymin,ymax）：4 外墙 + 死亡长廊/混沌迷宫/U型死锁谷/极限一线天
+    MAZE_WALLS = [
+        (0.0, 40.0, 0.0, 1.0), (0.0, 40.0, 39.0, 40.0),          # 下、上 外墙
+        (0.0, 1.0, 0.0, 40.0), (39.0, 40.0, 0.0, 40.0),          # 左、右 外墙
+        (28.0, 29.0, 5.0, 33.0), (33.0, 34.0, 5.0, 33.0), (28.0, 34.0, 33.0, 34.0),   # 死亡长廊
+        (5.0, 12.0, 28.0, 29.0), (5.0, 6.0, 22.0, 29.0), (5.0, 12.0, 22.0, 23.0),
+        (11.0, 12.0, 23.0, 27.0), (11.0, 16.0, 27.0, 28.0),       # 混沌迷宫
+        (5.0, 12.0, 10.0, 11.0), (5.0, 6.0, 5.0, 11.0), (5.0, 12.0, 5.0, 6.0),         # U 型死锁谷
+        (18.0, 23.0, 18.0, 19.0), (15.0, 20.0, 15.0, 16.0), (18.0, 23.0, 12.0, 13.0),
+        (23.0, 24.0, 13.0, 18.0),                                  # 极限一线天
+    ]
+    MAZE_W = 40.0
+    MAZE_H = 40.0
+
     # ====================== 奖励函数 权重 ======================
     # 【核心调参区】下列权重直接决定智能体的「性格」，注释给出工程含义与调参方向。
     K_PROGRESS   = 30.0     # ↑ 稠密进度奖励：每靠近目标 1m 给 +30。这是学习的主信号，
@@ -110,7 +132,8 @@ class EmbodiedNavEnv(gym.Env):
     SAFE_DIST    = 0.6      # 安全缓冲区距离阈值 (m)，min(lidar) 小于它即开始软惩罚。
     K_SMOOTH     = 0.3      # ↓ 角速度平滑惩罚系数：抑制原地高频抖动，输出更顺滑的轨迹。
 
-    def __init__(self, render_mode=None, seed=None, slip=None, control_mode="A"):
+    def __init__(self, render_mode=None, seed=None, slip=None, control_mode="A",
+                 map_type="random_circle", collision_mode=None):
         super().__init__()
         self.render_mode = render_mode
         # 里程计打滑系数（可配置）：None 取类常量 SLIP_FACTOR；显式传 0.0 即关闭漂移
@@ -119,6 +142,19 @@ class EmbodiedNavEnv(gym.Env):
         # 控制模式：'A'=目标速度跟踪（Phase1a，obs26/act[v,w]）；'B'=原始轮力（Phase1b，obs28/act[f_l,f_r]）
         assert control_mode in ("A", "B"), "control_mode 必须为 'A' 或 'B'"
         self.control_mode = control_mode
+
+        # 地图后端 + 碰撞语义（Phase2）：random_circle 默认保持 Phase0-1c 行为（零回归）
+        assert map_type in ("random_circle", "maze")
+        self.map_type = map_type
+        if map_type == "maze":
+            self.arena_w, self.arena_h = self.MAZE_W, self.MAZE_H
+            self.walls = list(self.MAZE_WALLS)       # AABB 墙体（迷宫）
+            self.collision_mode = collision_mode or "bounce"   # 迷宫默认 bounce（带真碰撞导航）
+        else:
+            self.arena_w, self.arena_h = self.ARENA_W, self.ARENA_H
+            self.walls = []                          # 随机圆图无内墙（外界用 _ray_walls 处理）
+            self.collision_mode = collision_mode or "terminate"  # 论文版默认 terminate
+        self._walls_arr = np.array(self.walls, dtype=np.float64).reshape(-1, 4)
 
         # 观测空间：N 根 lidar(0~1) + dist(0~1) + yaw_err(-1~1)；B-mode 额外加 v_act/w_act 反馈
         #   （力控下速度是显著隐藏态，τ≈3×步长，智能体需观测实际速度方能做力→运动信用分配）
@@ -142,8 +178,8 @@ class EmbodiedNavEnv(gym.Env):
                 low=np.array([0.0, -1.0], dtype=np.float32),
                 high=np.array([1.0, 1.0], dtype=np.float32), dtype=np.float32)
 
-        # 场地对角线，用于距离归一化
-        self._max_dist = float(np.hypot(self.ARENA_W, self.ARENA_H))
+        # 场地对角线，用于距离归一化（按地图实际尺寸）
+        self._max_dist = float(np.hypot(self.arena_w, self.arena_h))
 
         # 预计算 LiDAR 各射线相对底盘朝向的角度偏移（360° 均匀分布）
         self._ray_offsets = np.linspace(
@@ -172,8 +208,12 @@ class EmbodiedNavEnv(gym.Env):
         self.last_dE = 0.0       # 本 step 动能变化量
         self.last_W_act = 0.0    # 本 step 执行器净做功（按"声称"力，供审计对账）
         self.last_D_damp = 0.0   # 本 step 阻尼耗散（按"声称"阻尼系数 C_LIN/C_ANG）
+        # —— 碰撞账本（Phase2，供 energy_audit 的 EC1/EC4/EC5 消费）——
+        self.last_E_contact_decl = 0.0  # 本 step「声称」碰撞耗散 = (1−BOUNCE²)·KE_前（按声称恢复系数）
+        self.last_E_contact_act = 0.0   # 本 step「实际」碰撞动能变化 = KE_前−KE_后（注入器可使其<0=增能）
+        self.last_penetration = 0.0     # 本 step 解算后最大残余穿透深度（应≈0；CF-2 不修正则>0）
         # 物理故障注入钩子（None=清洁；audit/physics_injection.py 设置；仅测试，绝不进生产）
-        # 形如 {"mode": "P-1_neg_damp", ...}；藏在 _integrate_dynamics 内部破坏真实积分。
+        # 形如 {"mode": "P-1_neg_damp", ...}；藏在 _integrate_dynamics / _resolve_wall_collisions 内部。
         self.physics_fault = None
 
         if seed is not None:
@@ -185,21 +225,25 @@ class EmbodiedNavEnv(gym.Env):
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)  # 初始化 self.np_random（带种子的随机数发生器）
 
-        # 1) 随机生成障碍物（拒绝采样：避免压在场地边缘）
-        obstacles = []
-        margin = self.OBS_R_MAX + 0.2
-        for _ in range(self.N_OBSTACLES):
-            r = self.np_random.uniform(self.OBS_R_MIN, self.OBS_R_MAX)
-            cx = self.np_random.uniform(margin, self.ARENA_W - margin)
-            cy = self.np_random.uniform(margin, self.ARENA_H - margin)
-            obstacles.append([cx, cy, r])
-        self.obstacles = np.array(obstacles, dtype=np.float64)
+        # 1) 障碍物：random_circle 随机生成圆；maze 无圆障（墙体为静态 AABB，不随回合变）
+        if self.map_type == "maze":
+            self.obstacles = np.zeros((0, 3), dtype=np.float64)   # 迷宫无圆障
+        else:
+            obstacles = []
+            margin = self.OBS_R_MAX + 0.2
+            for _ in range(self.N_OBSTACLES):
+                r = self.np_random.uniform(self.OBS_R_MIN, self.OBS_R_MAX)
+                cx = self.np_random.uniform(margin, self.arena_w - margin)
+                cy = self.np_random.uniform(margin, self.arena_h - margin)
+                obstacles.append([cx, cy, r])
+            self.obstacles = np.array(obstacles, dtype=np.float64)
 
-        # 2) 随机起点与目标（拒绝采样：不与任何障碍物重叠，且两者保持足够间距）
+        # 2) 随机起点与目标（拒绝采样：不与任何障碍物/墙重叠，且两者保持足够间距）
         self.pos = self._sample_free_point(clearance=self.ROBOT_RADIUS + 0.1)
-        while True:
+        min_sep = (0.4 if self.map_type != "maze" else 0.25) * self._max_dist
+        for _ in range(200):
             self.goal = self._sample_free_point(clearance=self.GOAL_RADIUS + 0.1)
-            if np.linalg.norm(self.goal - self.pos) > 0.4 * self._max_dist:
+            if np.linalg.norm(self.goal - self.pos) > min_sep:
                 break  # 保证导航任务有足够长度，避免一步到位的退化样本
 
         # 3) 初始朝向随机
@@ -209,13 +253,16 @@ class EmbodiedNavEnv(gym.Env):
         self.odom_pos = self.pos.copy()
         self.odom_theta = self.theta
 
-        # 5) 动力学态复位：实际速度归零，回合从静止起步；能量账本清零
+        # 5) 动力学态复位：实际速度归零，回合从静止起步；能量+碰撞账本清零
         self.v_act = 0.0
         self.w_act = 0.0
         self.E_kin = 0.0
         self.last_dE = 0.0
         self.last_W_act = 0.0
         self.last_D_damp = 0.0
+        self.last_E_contact_decl = 0.0
+        self.last_E_contact_act = 0.0
+        self.last_penetration = 0.0
 
         self.step_count = 0
         self.prev_dist = float(np.linalg.norm(self.goal - self.pos))
@@ -242,29 +289,41 @@ class EmbodiedNavEnv(gym.Env):
             self._step_dynamics(a0 * self.MAX_LIN_VEL, a1 * self.MAX_ANG_VEL)
             w_cmd = a1
 
-        # —— 2b) 里程计积分（D-018 真打滑）：吃「实际速度」v_act/w_act（轮速编码器感知实际而非指令），
-        #         施加打滑误差 → 真实分叉（C1 不变）。位置积分由动力学核已完成，此处仅 odom。
+        # —— 2b) 墙体碰撞解算（Phase2/maze）：圆-AABB 穿透推出 + 速度回弹 + 碰撞账本；
+        #         random_circle 无墙 → no-op（清洁路径零回归）。修改 self.pos/self.v_act。
+        wall_contact = self._resolve_wall_collisions()
+
+        # —— 2c) 里程计积分（D-018 真打滑）：吃「实际速度」v_act/w_act（轮速编码器感知实际而非指令），
+        #         施加打滑误差 → 真实分叉（C1 不变）。位置积分（含碰撞推出）已完成，此处仅 odom。
         self._integrate_odom(self.v_act, self.w_act)
 
         self.step_count += 1
         self.frame_seq += 1        # 全局帧序号单调自增（跨回合不复位）
 
-        # —— 3) 计算几何量 ——
+        # —— 3) 计算几何量（在碰撞推出之后）——
         dist = float(np.linalg.norm(self.goal - self.pos))
         lidar = self._cast_lidar()           # 真实测距（米）
         self.last_lidar = lidar
         min_lidar = float(lidar.min())
 
-        # —— 4) 终止判定 ——
-        collided = self._check_collision(min_lidar)
+        # —— 4) 终止 + 接触判定（按碰撞语义）——
         reached = dist < self.GOAL_RADIUS
-        terminated = bool(collided or reached)
+        if self.collision_mode == "bounce":
+            # bounce：撞墙不终止（已推出+回弹），仅每接触步惩罚；仅到达终止。
+            contact = wall_contact
+            collided = wall_contact
+            terminated = bool(reached)
+        else:
+            # terminate：论文版——出界/撞圆即终止。
+            collided = self._check_collision(min_lidar)
+            contact = collided
+            terminated = bool(collided or reached)
         truncated = bool(self.step_count >= self.MAX_STEPS)
 
         # —— 5) 奖励合成 ——
         reward = self._compute_reward(
             dist=dist, w_cmd=w_cmd, min_lidar=min_lidar,
-            collided=collided, reached=reached,
+            collided=collided, reached=reached, contact=contact,
         )
         self.prev_dist = dist
 
@@ -272,6 +331,7 @@ class EmbodiedNavEnv(gym.Env):
         info = {
             "is_success": reached,
             "collided": collided,
+            "contact": contact,
             "distance": dist,
             "min_lidar": min_lidar,
         }
@@ -443,7 +503,7 @@ class EmbodiedNavEnv(gym.Env):
     # ------------------------------------------------------------------
     # 奖励函数（稠密塑形：进度主导 + 安全软约束 + 步数/平滑正则）
     # ------------------------------------------------------------------
-    def _compute_reward(self, dist, w_cmd, min_lidar, collided, reached):
+    def _compute_reward(self, dist, w_cmd, min_lidar, collided, reached, contact=False):
         # (a) 稠密进度奖励：与「距离减少量」成正比，提供持续的梯度信号
         reward = self.K_PROGRESS * (self.prev_dist - dist)
 
@@ -457,11 +517,17 @@ class EmbodiedNavEnv(gym.Env):
         if min_lidar < self.SAFE_DIST:
             reward -= self.K_SAFETY * (self.SAFE_DIST - min_lidar) / self.SAFE_DIST
 
-        # (e) 稀疏终止奖励
+        # (e) 终止/接触奖励（按碰撞语义重设计）
         if reached:
             reward += self.R_GOAL
-        elif collided:
-            reward += self.R_COLLISION
+        elif self.collision_mode == "bounce":
+            # bounce：撞墙不终止，每接触步小额惩罚（替代 R_COLLISION 终止），逼迫学避让但允许蹭墙恢复
+            if contact:
+                reward += self.R_CONTACT
+        else:
+            # terminate：论文版——撞即终止大额负奖励
+            if collided:
+                reward += self.R_COLLISION
 
         return float(reward)
 
@@ -514,27 +580,42 @@ class EmbodiedNavEnv(gym.Env):
             valid = hit & (t0 > 0)
             dists = np.where(valid, np.minimum(dists, t0), dists)
 
-        # —— (2) 射线 vs 场地四面墙（轴对齐边界求交）——
-        dists = self._ray_walls(P, dirs, dists)
+        # —— (2) 射线 vs 墙：maze 用射线-AABB（含外墙）；random_circle 用场地四面边界 ——
+        if self._walls_arr.shape[0] > 0:
+            dists = self._ray_aabbs(P, dirs, dists)
+        else:
+            dists = self._ray_walls(P, dirs, dists)
 
         return np.clip(dists, 0.0, self.LIDAR_RANGE)
 
     def _ray_walls(self, P, dirs, dists):
-        """射线与轴对齐矩形场地边界求交，逐墙向量化更新最小测距。"""
+        """射线与轴对齐矩形场地边界求交，逐墙向量化更新最小测距（random_circle 用）。"""
         dx, dy = dirs[:, 0], dirs[:, 1]
         with np.errstate(divide="ignore", invalid="ignore"):
-            # 垂直墙 x = 0 与 x = ARENA_W
-            for wx in (0.0, self.ARENA_W):
+            for wx in (0.0, self.arena_w):
                 t = (wx - P[0]) / dx
                 y_hit = P[1] + t * dy
-                valid = (dx != 0) & (t > 0) & (y_hit >= 0) & (y_hit <= self.ARENA_H)
+                valid = (dx != 0) & (t > 0) & (y_hit >= 0) & (y_hit <= self.arena_h)
                 dists = np.where(valid, np.minimum(dists, t), dists)
-            # 水平墙 y = 0 与 y = ARENA_H
-            for wy in (0.0, self.ARENA_H):
+            for wy in (0.0, self.arena_h):
                 t = (wy - P[1]) / dy
                 x_hit = P[0] + t * dx
-                valid = (dy != 0) & (t > 0) & (x_hit >= 0) & (x_hit <= self.ARENA_W)
+                valid = (dy != 0) & (t > 0) & (x_hit >= 0) & (x_hit <= self.arena_w)
                 dists = np.where(valid, np.minimum(dists, t), dists)
+        return dists
+
+    def _ray_aabbs(self, P, dirs, dists):
+        """射线-AABB（slab 法，向量化 over 射线），逐墙更新最小测距（maze 用，含外墙）。"""
+        dx, dy = dirs[:, 0], dirs[:, 1]
+        with np.errstate(divide="ignore", invalid="ignore"):
+            for wx1, wx2, wy1, wy2 in self.walls:
+                tx1, tx2 = (wx1 - P[0]) / dx, (wx2 - P[0]) / dx
+                ty1, ty2 = (wy1 - P[1]) / dy, (wy2 - P[1]) / dy
+                tenter = np.maximum(np.minimum(tx1, tx2), np.minimum(ty1, ty2))
+                texit = np.minimum(np.maximum(tx1, tx2), np.maximum(ty1, ty2))
+                valid = (tenter <= texit) & (texit > 0) & (tenter > 0)
+                t = np.where(valid, tenter, np.inf)
+                dists = np.minimum(dists, np.where(np.isfinite(t), t, dists))
         return dists
 
     # ------------------------------------------------------------------
@@ -543,31 +624,119 @@ class EmbodiedNavEnv(gym.Env):
     def _check_collision(self, min_lidar):
         # (a) 出界：底盘圆超出场地
         x, y = self.pos
-        if (x - self.ROBOT_RADIUS < 0 or x + self.ROBOT_RADIUS > self.ARENA_W or
-                y - self.ROBOT_RADIUS < 0 or y + self.ROBOT_RADIUS > self.ARENA_H):
+        if (x - self.ROBOT_RADIUS < 0 or x + self.ROBOT_RADIUS > self.arena_w or
+                y - self.ROBOT_RADIUS < 0 or y + self.ROBOT_RADIUS > self.arena_h):
             return True
         # (b) 与障碍物穿模：圆心距 < 半径和（每个障碍 O(1)）
-        diff = self.obstacles[:, :2] - self.pos                 # (K,2)
-        center_dist = np.linalg.norm(diff, axis=1)              # (K,)
-        if np.any(center_dist < self.obstacles[:, 2] + self.ROBOT_RADIUS):
-            return True
+        if self.obstacles.shape[0] > 0:
+            diff = self.obstacles[:, :2] - self.pos                 # (K,2)
+            center_dist = np.linalg.norm(diff, axis=1)              # (K,)
+            if np.any(center_dist < self.obstacles[:, 2] + self.ROBOT_RADIUS):
+                return True
         return False
+
+    # ------------------------------------------------------------------
+    # F4 矩形碰撞（Phase2）：圆-AABB 穿透解析 + 推出 + 速度回弹 + 碰撞账本
+    # ------------------------------------------------------------------
+    def _circle_aabb_overlap(self, pos):
+        """返回 (max_overlap, push_vector)：圆心 pos 对所有墙 AABB 的最大穿透与推出位移（单墙最近点法）。"""
+        r = self.ROBOT_RADIUS
+        max_pen = 0.0
+        push = np.zeros(2)
+        for wx1, wx2, wy1, wy2 in self.walls:
+            cx = min(max(pos[0], wx1), wx2)      # AABB 上离圆心最近点
+            cy = min(max(pos[1], wy1), wy2)
+            dx, dy = pos[0] - cx, pos[1] - cy
+            d = math.hypot(dx, dy)
+            if d < r:                            # 穿透
+                pen = r - d
+                if d > 1e-9:
+                    nx, ny = dx / d, dy / d
+                else:
+                    # 圆心落在 AABB 内：沿最小穿透轴推出（old:649-655）
+                    dl, dr_, db, dt = pos[0] - wx1, wx2 - pos[0], pos[1] - wy1, wy2 - pos[1]
+                    m = min(dl, dr_, db, dt)
+                    if m == dl: nx, ny, pen = -1.0, 0.0, dl + r
+                    elif m == dr_: nx, ny, pen = 1.0, 0.0, dr_ + r
+                    elif m == db: nx, ny, pen = 0.0, -1.0, db + r
+                    else: nx, ny, pen = 0.0, 1.0, dt + r
+                if pen > max_pen:
+                    max_pen = pen
+                push += np.array([nx * pen, ny * pen])
+        return max_pen, push
+
+    def _resolve_wall_collisions(self):
+        """maze/bounce：圆-AABB 穿透推出（2 次迭代解角落）+ 速度回弹 + 碰撞账本。无墙则 no-op。
+
+        碰撞故障注入（physics_fault，藏此处）：
+            CF-1 over_bounce(bounce_eff>1)  —— 回弹增能（破坏碰撞能量非负律）。
+            CF-2 skip_pushout               —— 不修正穿透却照常结算（破坏非穿透不变量）。
+            CF-3 phantom_contact            —— 账本声称碰撞耗散、实际不衰减速度（破坏能量账本自洽）。
+        账本：last_E_contact_decl=(1−BOUNCE²)·KE_前（声称）；last_E_contact_act=KE_前−KE_后（实际）；
+              last_penetration=解算后残余穿透（应≈0）。EC1/EC4/EC5 据此判。
+        """
+        self.last_E_contact_decl = 0.0
+        self.last_E_contact_act = 0.0
+        self.last_penetration = 0.0
+        if self._walls_arr.shape[0] == 0:
+            return False
+
+        f = self.physics_fault or {}
+        e_eff = f.get("bounce_eff", self.BOUNCE)     # CF-1：>1 增能
+        skip_pushout = f.get("skip_pushout", False)  # CF-2
+        phantom = f.get("phantom_contact", False)    # CF-3
+
+        I_decl = self.INERTIA_COEF * self.MASS
+        ke_before = 0.5 * self.MASS * self.v_act ** 2 + 0.5 * I_decl * self.w_act ** 2
+
+        contact = False
+        for _ in range(2):                            # 2 次迭代解角落/窄缝（old:645）
+            pen, push = self._circle_aabb_overlap(self.pos)
+            if pen > 0.0:
+                contact = True
+                if not skip_pushout:
+                    self.pos = self.pos + push
+
+        if contact:
+            # 速度回弹：v/w 衰减 e（诚实 e≤1 耗散；CF-1 e>1 增能）。phantom 则不衰减（谎称耗散）。
+            if not phantom:
+                self.v_act *= e_eff
+                self.w_act *= e_eff
+            ke_after = 0.5 * self.MASS * self.v_act ** 2 + 0.5 * I_decl * self.w_act ** 2
+            self.E_kin = ke_after
+            self.last_dE += (ke_after - ke_before)          # 把碰撞 KE 变化并入本 step ΔE
+            self.last_E_contact_act = ke_before - ke_after  # 实际（CF-1 使其<0）
+            self.last_E_contact_decl = (1.0 - self.BOUNCE ** 2) * ke_before  # 声称（按 class BOUNCE）
+            self.last_penetration = self._circle_aabb_overlap(self.pos)[0]   # 解算后残余穿透（CF-2 >0）
+        return contact
 
     # ------------------------------------------------------------------
     # 工具：采样自由点 / 角度归一化
     # ------------------------------------------------------------------
     def _sample_free_point(self, clearance):
-        """在场地内拒绝采样一个不与障碍物重叠的点。"""
-        for _ in range(200):
+        """在场地内拒绝采样一个不与障碍物/墙重叠的点。"""
+        for _ in range(300):
             p = np.array([
-                self.np_random.uniform(clearance, self.ARENA_W - clearance),
-                self.np_random.uniform(clearance, self.ARENA_H - clearance),
+                self.np_random.uniform(clearance, self.arena_w - clearance),
+                self.np_random.uniform(clearance, self.arena_h - clearance),
             ])
-            diff = self.obstacles[:, :2] - p
-            d = np.linalg.norm(diff, axis=1)
-            if np.all(d > self.obstacles[:, 2] + clearance):
-                return p
+            if self.obstacles.shape[0] > 0:
+                d = np.linalg.norm(self.obstacles[:, :2] - p, axis=1)
+                if not np.all(d > self.obstacles[:, 2] + clearance):
+                    continue
+            if self._walls_arr.shape[0] > 0 and self._circle_aabb_overlap_clear(p, clearance):
+                continue
+            return p
         return p  # 兜底：极端拥挤时返回最后一次采样
+
+    def _circle_aabb_overlap_clear(self, pos, clearance):
+        """True 表示 pos 距某墙 < clearance（不够空旷，用于 spawn/goal 拒绝采样）。"""
+        for wx1, wx2, wy1, wy2 in self.walls:
+            cx = min(max(pos[0], wx1), wx2)
+            cy = min(max(pos[1], wy1), wy2)
+            if math.hypot(pos[0] - cx, pos[1] - cy) < clearance:
+                return True
+        return False
 
     @staticmethod
     def _wrap_angle(a):
@@ -606,7 +775,10 @@ class EmbodiedNavEnv(gym.Env):
             ],
             "lidar": [float(d) for d in lidar],       # 真实测距 (m)，前端可画射线
             "lidar_range": self.LIDAR_RANGE,
-            "arena": {"w": self.ARENA_W, "h": self.ARENA_H},
+            "arena": {"w": self.arena_w, "h": self.arena_h},
+            # F2 迷宫墙体（AABB）：前端可渲染；random_circle 为空列表（向后兼容）
+            "walls": [{"x1": float(w[0]), "x2": float(w[1]), "y1": float(w[2]), "y2": float(w[3])}
+                      for w in self.walls],
             "seq": int(self.frame_seq),    # 全局单调帧序号（完整性审计校验帧序单调用）
             "step": int(self.step_count),
             "reward": float(reward),
@@ -618,9 +790,12 @@ class EmbodiedNavEnv(gym.Env):
             "w_act": float(self.w_act),     # 实际角速度
             "energy": {                      # 能量账本（供 energy_audit 消费；本 step 真实数字）
                 "E_kin": float(self.E_kin),       # 当前动能 ½m·v² + ½I·w²
-                "dE": float(self.last_dE),        # 本 step 动能变化
+                "dE": float(self.last_dE),        # 本 step 动能变化（含碰撞）
                 "W_act": float(self.last_W_act),  # 执行器净做功（按声称力）
                 "D_damp": float(self.last_D_damp),  # 阻尼耗散（按声称阻尼系数）
+                "E_contact_decl": float(self.last_E_contact_decl),  # 声称碰撞耗散（按声称恢复系数）
+                "E_contact_act": float(self.last_E_contact_act),    # 实际碰撞动能变化（CF-1 使其<0）
+                "penetration": float(self.last_penetration),        # 解算后残余穿透（CF-2 >0）
             },
         }
 

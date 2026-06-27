@@ -32,8 +32,12 @@ V_PHYS_MAX = 1.25     # = MAX_LIN_VEL * 1.25
 W_PHYS_MAX = 1.875    # = MAX_ANG_VEL * 1.25
 
 
+PEN_FLOOR = 1e-4      # 非穿透残差下限 (m)：2 次迭代推出后残余穿透应远小于此
+
+
 def _floor(f):
-    return EPS_REL * (abs(f["W_act"]) + abs(f["D_damp"]) + abs(f["dE"])) + EPS_ABS
+    return EPS_REL * (abs(f["W_act"]) + abs(f["D_damp"]) + abs(f["dE"])
+                      + abs(f.get("E_contact_decl", 0.0))) + EPS_ABS
 
 
 def _result(name, desc, ok, detail, locator=None):
@@ -49,7 +53,8 @@ def check_energy_budget(session):
     run_start = None
     worst = 0.0
     for i, f in enumerate(session):
-        r = f["dE"] - (f["W_act"] - f["D_damp"])
+        # 含碰撞耗散项（声称）：ΔE 应 = W_act − D_damp − E_contact_decl（无碰撞时 E_contact=0 退化）
+        r = f["dE"] - (f["W_act"] - f["D_damp"] - f.get("E_contact_decl", 0.0))
         if abs(r) > _floor(f):
             if run == 0:
                 run_start = i
@@ -128,16 +133,71 @@ def check_actuator_bound(session, v_max=V_PHYS_MAX, w_max=W_PHYS_MAX):
                    "实际线/角速度均未越执行器物理上限")
 
 
-CHECKS = [check_energy_budget, check_no_free_energy, check_actuator_bound]
+# ====================================================================
+# EC4 · 碰撞能量非负（碰撞只耗能不增能：E_contact_act ≥ 0 → 抓「过度回弹增能」）
+# ====================================================================
+def check_collision_nonneg(session):
+    run = 0
+    run_start = None
+    worst = 0.0
+    for i, f in enumerate(session):
+        ec = f.get("E_contact_act", 0.0)        # 实际碰撞动能变化（KE_前−KE_后）
+        if ec < -_floor(f):                     # <0 表示碰撞凭空增能（破坏第二定律）
+            if run == 0:
+                run_start = i
+            run += 1
+            worst = min(worst, ec)
+            if run >= 1:                         # 碰撞稀疏：单帧增能即判（不要求持续）
+                return _result(
+                    "EC4_COLLISION_NONNEG", "碰撞是否未凭空增能（E_contact≥0）", False,
+                    f"碰撞凭空增能 @step={session[run_start]['step']}：E_contact_act={worst:.3e} J<0 "
+                    f"—— 回弹增能（破坏碰撞能量非负律）",
+                    locator={"first_step": session[run_start]["step"],
+                             "first_seq": session[run_start]["seq"],
+                             "min_E_contact_J": round(worst, 6)})
+        else:
+            run = 0
+    return _result("EC4_COLLISION_NONNEG", "碰撞是否未凭空增能（E_contact≥0）", True,
+                   "无碰撞增能：所有接触的 E_contact_act ≥ 0（碰撞只耗能）")
 
 
-def audit_session(session, v_max=V_PHYS_MAX, w_max=W_PHYS_MAX):
-    """对账本 session 跑 EC1/EC2/EC3。v_max/w_max 为执行器物理速度上限（A/B 模式不同）。"""
+# ====================================================================
+# EC5 · 非穿透（解算后机器人不得与墙重叠：penetration ≤ 下限 → 抓「穿透不修正」）
+# ====================================================================
+def check_non_penetration(session):
+    worst = 0.0
+    worst_i = None
+    for i, f in enumerate(session):
+        pen = f.get("penetration", 0.0)
+        if pen > PEN_FLOOR and pen > worst:
+            worst, worst_i = pen, i
+    if worst_i is not None:
+        return _result(
+            "EC5_NON_PENETRATION", "解算后是否无残余穿透", False,
+            f"残余穿透 @step={session[worst_i]['step']}：penetration={worst:.4f} m > {PEN_FLOOR} "
+            f"—— 穿透未修正却谎称已解算",
+            locator={"first_step": session[worst_i]["step"], "first_seq": session[worst_i]["seq"],
+                     "max_penetration_m": round(worst, 5)})
+    return _result("EC5_NON_PENETRATION", "解算后是否无残余穿透", True,
+                   "无残余穿透：碰撞推出后机器人均不与墙重叠")
+
+
+CHECKS = [check_energy_budget, check_no_free_energy, check_actuator_bound,
+          check_collision_nonneg, check_non_penetration]
+
+
+def audit_session(session, v_max=V_PHYS_MAX, w_max=W_PHYS_MAX, with_collision=False):
+    """对账本 session 跑能量/碰撞审计。
+    with_collision=True 时额外跑 EC4(碰撞非负)/EC5(非穿透)（需账本含 E_contact_act/penetration 字段）。
+    """
     results = [
         check_energy_budget(session),
         check_no_free_energy(session),
         check_actuator_bound(session, v_max=v_max, w_max=w_max),
     ]
+    if with_collision:
+        results.append(check_collision_nonneg(session))
+        results.append(check_non_penetration(session))
     passed = all(r["ok"] for r in results)
     return {"passed": passed, "verdict": "GREEN" if passed else "RED", "checks": results}
 

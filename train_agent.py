@@ -28,6 +28,7 @@ from embodied_env import EmbodiedNavEnv
 # 可由环境变量覆盖（dev 分支：默认产出 *_dyn 权重，绝不覆盖论文 .pth / dyn.pth）
 TOTAL_TIMESTEPS = int(os.environ.get("EMBODIED_TIMESTEPS", 1_000_000))  # 总训练步数
 CONTROL_MODE = os.environ.get("EMBODIED_CONTROL_MODE", "A")             # 'A'=目标速度 / 'B'=力控
+MAP_TYPE = os.environ.get("EMBODIED_MAP_TYPE", "random_circle")         # 'random_circle' / 'maze'
 MODEL_PATH = os.environ.get("EMBODIED_MODEL_PATH", "ppo_embodied_agent_dyn.pth")  # 权重输出
 SB3_NATIVE_PATH = os.environ.get("EMBODIED_SB3_PATH", "ppo_embodied_agent_dyn")   # SB3 原生 zip
 CKPT_PREFIX = os.environ.get("EMBODIED_CKPT_PREFIX", "ppo_dyn_ckpt")    # 检查点前缀
@@ -70,7 +71,7 @@ def make_env():
     """构造单环境（Monitor 包裹以采集回合统计）。
     单核满载场景下用 DummyVecEnv 单实例即可；若放开多核，把这里改成
     SubprocVecEnv + 多个 make_env 即可线性提速。"""
-    env = EmbodiedNavEnv(render_mode=None, control_mode=CONTROL_MODE)
+    env = EmbodiedNavEnv(render_mode=None, control_mode=CONTROL_MODE, map_type=MAP_TYPE)
     if BOOST_FORCE > 0.0:
         env.physics_fault = {"mode": "G-1_speed_boost",
                              "boost_force": BOOST_FORCE, "boost_thresh": BOOST_THRESH}

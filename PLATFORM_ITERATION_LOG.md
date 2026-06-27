@@ -3,7 +3,7 @@
 > **单一累积文档**：每个平台迭代任务都更新此处。记录各 Phase 的设计决策/实现/验证（真实数字），
 > 以及**当前平台状态**（分支、权重、能力、局限）。目的：平台演进可追溯，未来接手者/AI 不必重新逆向。
 > 🔴 红线：master `7b54625`（已投稿论文版）**永久冻结**；所有迭代在 dev 分支；论文权重不覆盖。
-> 最后更新：2026-06-26（Phase1c 完成）
+> 最后更新：2026-06-26（Phase2 完成）
 
 ---
 
@@ -14,7 +14,8 @@
 |---|---|---|
 | `master` | 🔒 **冻结** 论文投稿版（零惯性运动学 + 契约审计 C1/C2/C3 + 真分叉 odom + ROS2） | — |
 | `dev/stage1-dynamics` | Phase1a：动力学核 + A-mode + 能量审计 EC1-EC3 + 5 注入器 | master `7b54625` |
-| `dev/stage2-bmode` | Phase1b：B-mode 力控 + 涌现 gaming 实验 | Phase1a `432d24b` |
+| `dev/stage2-bmode` | Phase1b/1c：B-mode 力控 + G-1/G-2 gaming 实验 | Phase1a `432d24b` |
+| `dev/stage3-maze` | Phase2：F4 矩形碰撞 + F2 40×40 迷宫 + 碰撞故障审计 | Phase1c `5e2af1c` |
 
 ### 1.2 权重文件（各自配置，互不覆盖）
 | 文件 | 配置 | 性能(N=25/30 固定种子) | 所在分支 |
@@ -24,16 +25,18 @@
 | `ppo_embodied_agent_bmode.pth` | B-mode 力控(τ=4×步长) · obs28/act[f_l,f_r] | 76%/16%/8% | dev/stage2 |
 | `ppo_embodied_agent_bmode_gamed.pth` | B-mode + G-1 故障环境训练（**被动 gaming，涌现**） | Phase1b §2.2 | dev/stage2 |
 | `ppo_embodied_agent_g2gamed.pth` | B-mode + G-2 故障环境训练（**唯一习得 gaming，未涌现**） | Phase1c §2.2 | dev/stage2 |
+| `ppo_embodied_agent_maze.pth` | A-mode + 40×40 迷宫 + 矩形碰撞(bounce) | 成功48%/超时52% | dev/stage3 |
 
 ### 1.3 当前能力矩阵
 | 维度 | 状态 |
 |---|---|
 | **控制模式** | A=目标速度跟踪(P 控制器)；B=原始轮力力控。共享动力学核（力→牛顿+黏性阻尼→N_SUB 半隐式积分）。`ENABLE_DYNAMICS=False` 退回零惯性运动学（论文版行为） |
-| **物理保真度** | 简化动力学（质量/惯量/黏性阻尼）；能量账本精确电报（清洁残差 ~1e-16 J）。**未含**刚体/碰撞动力学 |
+| **物理保真度** | 简化动力学（质量/惯量/黏性阻尼）+ **F4 矩形碰撞**（圆-AABB 穿透推出+回弹 e=0.5）；能量+碰撞账本精确电报（清洁残差 ~1e-16 J）。**未含**刚体接触动力学 |
 | **契约层审计** | C1 真分叉 / C2 帧序单调 / C3 断流即冻结（**未改、回归通过**） |
-| **物理层审计** | EC1 能量预算残差 / EC2 无凭空能量 / EC3 执行器速度上限。5 物理注入器 P-1..P-5 自证抓假（A/B 模式各 5/5） |
-| **里程计** | 真分叉 odom（吃实际速度 v_act + 打滑漂移），C1 保留 |
-| **地图** | 10×10 随机圆形障碍（程序化生成）。**未含**墙体迷宫/动态障碍 |
+| **物理层审计** | EC1 能量预算 / EC2 无凭空能量 / EC3 执行器上限 / **EC4 碰撞非负 / EC5 非穿透**。8 注入器 P-1..P-5 + CF-1..CF-3 自证抓假（清洁绿 + 各判红） |
+| **里程计** | 真分叉 odom（吃实际速度 v_act + 打滑漂移），C1 保留；碰撞不修正 odom（守"只漂移不校正"） |
+| **地图** | `random_circle` 10×10 随机圆（默认，零回归）/ `maze` **40×40 手工墙体迷宫**（19 AABB，射线-AABB 雷达 + 圆-矩形碰撞）。**未含**动态障碍 |
+| **碰撞语义** | `terminate`（撞即终止，论文版）/ `bounce`（穿透推出+回弹+每步接触惩罚 R_CONTACT、不终止，迷宫导航用） |
 | **前端** | Three.js 纯观测、断流冻结 OFFLINE（未改）；契约加性新增 v_act/energy 字段 |
 | **ROS2** | /odom·/scan·tf + cmd_vel 人工覆盖（未改） |
 
@@ -77,6 +80,14 @@
 - **科学发现**：**可发现性-特异性权衡**——对齐型 exploit 涌现易但归因难；反常型 exploit 归因清晰但 RL 难自发发现（off-gradient）。
 - 详情：[docs/Phase1c-G2-UniqueGaming.md](docs/Phase1c-G2-UniqueGaming.md)。
 
+### Phase2 · F4 矩形碰撞 + F2 迷宫（dev/stage3-maze, 本次）
+- **决策**：地图后端抽象（random_circle 默认零回归 / maze 40×40 手工 19 墙）；F4 圆-AABB 穿透推出+回弹（全后端，复用 old 算法）+ 射线-AABB 雷达；碰撞语义 terminate/bounce 可配。
+- **奖励重设计**：bounce 模式撞墙不终止（R_COLLISION −200 终止 → R_CONTACT −5 每接触步），让智能体带真碰撞导航。
+- **验证**：maze 重训（A-mode/bounce）成功 48%/超时 52%/平均接触 3.1 步（40×40 对抗迷宫之难，如实）；能量审计 5/5 + 契约 C1-C3 无回归；直冲撞墙推出精确（x 钉 38.8、穿透 0、残差 1e-16）。
+- **碰撞故障类**：CF-1 过度回弹增能 / CF-2 不修正穿透 / CF-3 幽灵耗散 + EC4 碰撞非负 / EC5 非穿透。清洁绿 + 3/3 各特征检查判红（CF-1→EC4、CF-2→EC5、CF-3→EC1）。
+- **机会性**：honest maze 含碰撞轨迹能量审计 🟢GREEN——无自然碰撞 gaming（诚实回弹只耗能、无甜区 exploit），不强凑。
+- 详情：[docs/Phase2-Maze-Collision.md](docs/Phase2-Maze-Collision.md)。
+
 ---
 
 ## 3. 关键复现命令
@@ -95,6 +106,9 @@ python audit/run_gaming_experiment.py     # → gaming_compare.png, gaming_summa
 # G-2 唯一习得 gaming 训练 + 实验
 EMBODIED_CONTROL_MODE=B EMBODIED_G2_FORCE=6.0 EMBODIED_MODEL_PATH=ppo_embodied_agent_g2gamed.pth python train_agent.py
 python audit/run_g2_gaming_experiment.py  # → g2_gaming_compare.png, g2_gaming_summary.json
+# 迷宫(maze) + 矩形碰撞 训练 + 碰撞保真度审计
+EMBODIED_CONTROL_MODE=A EMBODIED_MAP_TYPE=maze EMBODIED_MODEL_PATH=ppo_embodied_agent_maze.pth python train_agent.py
+python audit/run_collision_audit.py       # → collision_redgreen_matrix.png（CF-1/2/3 红绿对照）
 # 契约层回归
 python audit/run_action1.py
 ```
@@ -102,6 +116,7 @@ python audit/run_action1.py
 ---
 
 ## 4. 下一步候选（待 Abi/Opus 定夺）
+- F3 动态障碍（巡逻车，移动 AABB；可能提供碰撞/避让甜区 gaming substrate）。
+- 提升 maze 成功率：简化迷宫 / 课程学习 / B-mode 力控迷宫策略；前端渲染迷宫墙体（契约已导出 walls）。
 - 桥接「可发现性-特异性权衡」：reward-shaping/课程学习引导 G-2 涌现，或换更强探索（RND/model-based）。
-- 丰富环境层：F4 矩形碰撞（撞即terminate vs bounce 可配）、F2 40×40 迷宫、F3 动态障碍。
 - 契约-内核对账（q 类，破信任根盲区）。
