@@ -65,7 +65,19 @@ class EmbodiedNavEnv(gym.Env):
     KP_V         = 12.0      # A-mode 速度跟踪 P 增益（目标速度→执行器力）
     KP_W         = 12.0      # A-mode 角速度跟踪 P 增益
     N_SUB        = 5         # 每个 env.step 的物理子步数（h = DT / N_SUB）
-    # 执行器物理速度上限（稳态 v_ss = KP/(KP+C)·MAX·，留 25% 余量供越界审计 EC3 判定）
+
+    # ---------------------- B-mode 力控（Phase1b）----------------------
+    # 动作 = 原始轮力 [f_l, f_r]（归一化 ∈[-1,1]，内部 ×F_MAX）。去掉 A-mode 的 P 跟踪层，
+    # 直接 force=f_l+f_r、torque=(f_r-f_l)·ARM（old:708-709），喂同一动力学核。
+    # 「有意义惯性」：B-mode 速度时间常数 τ_v = MASS/C_LIN（无 P 控制器加速），
+    #   = 1.0/3.0 ≈ 0.333s ≈ 3.3×DT —— 与步长可比/更大（A-mode 因 KP 而 τ≈0.055s≪DT 退化）。
+    F_MAX        = 2.25      # 单轮力上限 (N)：双轮满力 force=2·F_MAX → 稳态 v_ss_max=2·F_MAX/C_LIN=1.5 m/s
+    ARM          = 0.8       # 差动力臂；torque=(f_r-f_l)·ARM → 稳态 w_ss_max=2·F_MAX·ARM/C_ANG=1.2 rad/s
+    # B-mode 物理速度上限（稳态顶速 + 10% 余量供 EC3 越界判定；超过即非物理）
+    V_PHYS_MAX_B = (2.0 * F_MAX / C_LIN) * 1.10
+    W_PHYS_MAX_B = (2.0 * F_MAX * ARM / C_ANG) * 1.10
+
+    # 执行器物理速度上限（A-mode：稳态 v_ss=KP/(KP+C)·MAX，留 25% 余量供越界审计 EC3 判定）
     V_PHYS_MAX   = MAX_LIN_VEL * 1.25
     W_PHYS_MAX   = MAX_ANG_VEL * 1.25
 
@@ -98,29 +110,37 @@ class EmbodiedNavEnv(gym.Env):
     SAFE_DIST    = 0.6      # 安全缓冲区距离阈值 (m)，min(lidar) 小于它即开始软惩罚。
     K_SMOOTH     = 0.3      # ↓ 角速度平滑惩罚系数：抑制原地高频抖动，输出更顺滑的轨迹。
 
-    def __init__(self, render_mode=None, seed=None, slip=None):
+    def __init__(self, render_mode=None, seed=None, slip=None, control_mode="A"):
         super().__init__()
         self.render_mode = render_mode
         # 里程计打滑系数（可配置）：None 取类常量 SLIP_FACTOR；显式传 0.0 即关闭漂移
         self.slip_factor = float(self.SLIP_FACTOR if slip is None else slip)
 
-        # 观测空间：N 根 lidar(0~1) + dist(0~1) + yaw_err(-1~1)
-        obs_low = np.concatenate([
-            np.zeros(self.N_RAYS, dtype=np.float32),  # lidar 下界
-            np.array([0.0, -1.0], dtype=np.float32),  # dist, yaw_err 下界
-        ])
-        obs_high = np.concatenate([
-            np.ones(self.N_RAYS, dtype=np.float32),   # lidar 上界
-            np.array([1.0, 1.0], dtype=np.float32),   # dist, yaw_err 上界
-        ])
-        self.observation_space = spaces.Box(low=obs_low, high=obs_high, dtype=np.float32)
+        # 控制模式：'A'=目标速度跟踪（Phase1a，obs26/act[v,w]）；'B'=原始轮力（Phase1b，obs28/act[f_l,f_r]）
+        assert control_mode in ("A", "B"), "control_mode 必须为 'A' 或 'B'"
+        self.control_mode = control_mode
 
-        # 动作空间：v∈[0,1], w∈[-1,1]
-        self.action_space = spaces.Box(
-            low=np.array([0.0, -1.0], dtype=np.float32),
-            high=np.array([1.0, 1.0], dtype=np.float32),
-            dtype=np.float32,
-        )
+        # 观测空间：N 根 lidar(0~1) + dist(0~1) + yaw_err(-1~1)；B-mode 额外加 v_act/w_act 反馈
+        #   （力控下速度是显著隐藏态，τ≈3×步长，智能体需观测实际速度方能做力→运动信用分配）
+        base_low = [np.zeros(self.N_RAYS, dtype=np.float32),
+                    np.array([0.0, -1.0], dtype=np.float32)]
+        base_high = [np.ones(self.N_RAYS, dtype=np.float32),
+                     np.array([1.0, 1.0], dtype=np.float32)]
+        if control_mode == "B":
+            base_low.append(np.array([-1.0, -1.0], dtype=np.float32))   # v_act_norm, w_act_norm
+            base_high.append(np.array([1.0, 1.0], dtype=np.float32))
+        self.observation_space = spaces.Box(
+            low=np.concatenate(base_low), high=np.concatenate(base_high), dtype=np.float32)
+
+        # 动作空间：A=[v∈[0,1], w∈[-1,1]]；B=[f_l∈[-1,1], f_r∈[-1,1]]（归一化轮力，内部×F_MAX）
+        if control_mode == "B":
+            self.action_space = spaces.Box(
+                low=np.array([-1.0, -1.0], dtype=np.float32),
+                high=np.array([1.0, 1.0], dtype=np.float32), dtype=np.float32)
+        else:
+            self.action_space = spaces.Box(
+                low=np.array([0.0, -1.0], dtype=np.float32),
+                high=np.array([1.0, 1.0], dtype=np.float32), dtype=np.float32)
 
         # 场地对角线，用于距离归一化
         self._max_dist = float(np.hypot(self.ARENA_W, self.ARENA_H))
@@ -209,15 +229,18 @@ class EmbodiedNavEnv(gym.Env):
     # ------------------------------------------------------------------
     def step(self, action):
         action = np.clip(action, self.action_space.low, self.action_space.high)
-        v_cmd, w_cmd = float(action[0]), float(action[1])
+        a0, a1 = float(action[0]), float(action[1])
 
-        # —— 1) 指令还原为「目标速度」（A-mode：动作=目标速度，非瞬时实际速度）——
-        v_tgt = v_cmd * self.MAX_LIN_VEL
-        w_tgt = w_cmd * self.MAX_ANG_VEL
-
-        # —— 2) 动力学核推进真值位姿（力控核 + A-mode P 控制器），并结算能量账本 ——
-        #     ENABLE_DYNAMICS=False 时退回原零惯性运动学（v_act≡v_tgt），作回归对照。
-        self._step_dynamics(v_tgt, w_tgt)
+        # —— 1+2) 动力学核推进真值位姿，并结算能量账本（按控制模式分派）——
+        if self.control_mode == "B":
+            # B-mode：动作=归一化原始轮力 [f_l, f_r]（×F_MAX 还原），去 P 控制器、直接喂核。
+            self._step_dynamics_B(a0 * self.F_MAX, a1 * self.F_MAX)
+            # 平滑正则用「实际角速度」（无 w_cmd 概念），抑制无谓自旋。
+            w_cmd = self.w_act / self.MAX_ANG_VEL
+        else:
+            # A-mode：动作=目标速度 [v, w]；ENABLE_DYNAMICS=False 退回零惯性运动学。
+            self._step_dynamics(a0 * self.MAX_LIN_VEL, a1 * self.MAX_ANG_VEL)
+            w_cmd = a1
 
         # —— 2b) 里程计积分（D-018 真打滑）：吃「实际速度」v_act/w_act（轮速编码器感知实际而非指令），
         #         施加打滑误差 → 真实分叉（C1 不变）。位置积分由动力学核已完成，此处仅 odom。
@@ -283,6 +306,18 @@ class EmbodiedNavEnv(gym.Env):
         ang_force_of = lambda w: self.KP_W * (w_tgt - w)
         self._integrate_dynamics(lin_force_of, ang_force_of)
 
+    def _step_dynamics_B(self, f_l, f_r):
+        """B-mode：原始轮力 → 净力/差动力矩 → 共享核（去掉 A-mode 的 P 跟踪层）。
+
+        force=f_l+f_r、torque=(f_r−f_l)·ARM（old:708-709）。力对子步「恒定」（不随 v 变），
+        故 lin_force_of/ang_force_of 为常值闭包——动力学/阻尼/能量账本与 A-mode 共用同一核，
+        审计（EC1/EC2/EC3）作用于核、与控制模式无关。
+        有意义惯性：v 的时间常数 τ_v=MASS/C_LIN≈0.333s≈3.3×DT（无 P 控制器压缩）。
+        """
+        force = f_l + f_r
+        torque = (f_r - f_l) * self.ARM
+        self._integrate_dynamics(lambda v: force, lambda w: torque)
+
     def _integrate_dynamics(self, lin_force_of, ang_force_of):
         """共享动力学核：N_SUB 个半隐式子步，牛顿 + 黏性阻尼，结算精确能量账本。
 
@@ -307,6 +342,10 @@ class EmbodiedNavEnv(gym.Env):
         m_eff = f.get("m_eff", m_decl)               # 实际积分质量（≠声称则 P-5 谎报）
         skip_lag = f.get("skip_lag", False)          # P-4：跳过惯性滞后，实际速度瞬达/越目标
         overshoot = f.get("overshoot", 1.0)          # P-4：>1 则越过执行器上限（供 EC3 判定）
+        # G-1 涌现 gaming 故障：当 |v0|>boost_thresh，沿运动方向施加「免费」推力 boost_force，
+        #   账本不计该力 → 高速时白拿能量（稳态顶速越物理上限），对「求快到目标」的智能体有利可图。
+        boost_force = f.get("boost_force", 0.0)
+        boost_thresh = f.get("boost_thresh", 0.0)
 
         E0 = 0.5 * m_decl * self.v_act ** 2 + 0.5 * I_decl * self.w_act ** 2
         W_act = 0.0
@@ -318,14 +357,23 @@ class EmbodiedNavEnv(gym.Env):
             tau = ang_force_of(w0)
 
             if skip_lag:
-                # P-4：无视惯性/阻尼，实际速度直接锁到 overshoot×目标（P 控制器零误差点反推 v_tgt=v0+F/KP）。
+                # P-4：无视惯性/阻尼，实际速度直接锁到 overshoot×「该作动状态的应有稳态速度」。
                 #      overshoot>1 → 持续越执行器上限 + 动能凭空跃变（破坏执行器功率界）。
-                v_tgt_eq = v0 + (F / self.KP_V if self.KP_V else 0.0)
-                w_tgt_eq = w0 + (tau / self.KP_W if self.KP_W else 0.0)
+                # 稳态速度按模式求（皆有界，避免子步复利发散）：
+                #   A-mode：F=KP(v_tgt−v0) ⇒ 应有稳态 = v_tgt = v0 + F/KP；
+                #   B-mode：F 为原始力 ⇒ 应有稳态 = F/c_decl（角向 tau/c_ang_decl）。
+                if self.control_mode == "B":
+                    v_tgt_eq = (force_mult * F) / (c_lin_decl if c_lin_decl else 1.0)
+                    w_tgt_eq = (force_mult * tau) / (c_ang_decl if c_ang_decl else 1.0)
+                else:
+                    v_tgt_eq = v0 + (F / self.KP_V if self.KP_V else 0.0)
+                    w_tgt_eq = w0 + (tau / self.KP_W if self.KP_W else 0.0)
                 v_new = overshoot * v_tgt_eq
                 w_new = overshoot * w_tgt_eq
             else:
-                a = (force_mult * F - c_lin_eff * v0) / m_eff
+                # G-1：高速时白拿免费推力（账本不计）——能量凭空注入、顶速越物理上限。
+                boost = boost_force * np.sign(v0) if (boost_force and abs(v0) > boost_thresh) else 0.0
+                a = (force_mult * F + boost - c_lin_eff * v0) / m_eff
                 alpha = (force_mult * tau - c_ang_eff * w0) / (self.INERTIA_COEF * m_eff)
                 v_new = v0 + a * h
                 w_new = w0 + alpha * h
@@ -422,10 +470,13 @@ class EmbodiedNavEnv(gym.Env):
         yaw_err = self._wrap_angle(goal_angle - self.theta)
         yaw_err_norm = np.float32(yaw_err / np.pi)                         # ∈ [-1,1]
 
-        obs = np.concatenate([
-            lidar_norm,
-            np.array([dist_norm, yaw_err_norm], dtype=np.float32),
-        ])
+        parts = [lidar_norm, np.array([dist_norm, yaw_err_norm], dtype=np.float32)]
+        if self.control_mode == "B":
+            # B-mode 速度反馈：力控下速度是显著隐藏态（τ≈3×步长），需入观测做信用分配。
+            v_norm = np.float32(np.clip(self.v_act / self.V_PHYS_MAX_B, -1.0, 1.0))
+            w_norm = np.float32(np.clip(self.w_act / self.W_PHYS_MAX_B, -1.0, 1.0))
+            parts.append(np.array([v_norm, w_norm], dtype=np.float32))
+        obs = np.concatenate(parts)
         # 防御性裁剪：杜绝浮点误差导致越界，确保通过 env_checker 与 SB3 校验
         return np.clip(obs, self.observation_space.low, self.observation_space.high)
 

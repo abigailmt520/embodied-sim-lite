@@ -34,10 +34,23 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SESS_DIR = os.path.join(HERE, "physics_sessions")
 SEED = 7
 STEPS = 200
+# 控制模式由环境变量选择：'A'=目标速度（Phase1a 默认）/ 'B'=力控（Phase1b）。审计在动力学核上、应模式无关。
+CONTROL_MODE = os.environ.get("EMBODIED_AUDIT_MODE", "A")
+
+
+def _bounds():
+    """EC3 执行器速度上限（A/B 模式物理顶速不同）。"""
+    if CONTROL_MODE == "B":
+        return EmbodiedNavEnv.V_PHYS_MAX_B, EmbodiedNavEnv.W_PHYS_MAX_B
+    return EmbodiedNavEnv.V_PHYS_MAX, EmbodiedNavEnv.W_PHYS_MAX
 
 
 def command(t):
-    """开环正弦变命令（目标速度域 [v∈[0,1], w∈[-1,1]]）：持续暂态以暴露质量/力类故障。"""
+    """开环正弦变命令：持续暂态以暴露质量/力类故障。按模式返回 [v,w] 或 [f_l,f_r]。"""
+    if CONTROL_MODE == "B":
+        common = 0.65 + 0.30 * np.sin(2 * np.pi * t / 24.0)   # 共模力（前进/加减速 → 暂态）
+        diff = 0.30 * np.sin(2 * np.pi * t / 17.0)            # 差模力（转向）
+        return np.array([common - diff, common + diff], dtype=np.float32)  # [f_l, f_r]∈[-1,1]
     v = 0.55 + 0.40 * np.sin(2 * np.pi * t / 24.0)   # ∈[0.15,0.95]，峰值持续越上限供 P-4
     w = 0.90 * np.sin(2 * np.pi * t / 17.0)          # ∈[-0.9,0.9]
     return np.array([v, w], dtype=np.float32)
@@ -49,7 +62,7 @@ def record_session(configure_fault):
     configure_fault(env): 在 reset 后配置 env.physics_fault（清洁档为 no-op）。
     贯穿不复位：复位会清零能量账本，无法呈现连续残差累积。
     """
-    env = EmbodiedNavEnv(slip=0.0)        # 关打滑：能量审计只看动力学，排除 odom 噪声干扰
+    env = EmbodiedNavEnv(slip=0.0, control_mode=CONTROL_MODE)  # 关打滑：只看动力学，排除 odom 噪声
     env.reset(seed=SEED)
     configure_fault(env)
     rows = []
@@ -78,7 +91,9 @@ def main():
     print("\n" + "─" * 76)
     print("【门 P2｜审计放行清洁动力学（期望：全绿、零误报）】")
     print("─" * 76)
-    res_clean = audit_session(clean)
+    vmax, wmax = _bounds()
+    res_clean = audit_session(clean, v_max=vmax, w_max=wmax)
+    print(f"  [控制模式: {CONTROL_MODE}]  EC3 速度上限 v_max={vmax:.3f}, w_max={wmax:.3f}")
     print(format_report(res_clean))
     # 报告清洁残差量级（应 ~机器精度）
     max_r = max(abs(f["dE"] - (f["W_act"] - f["D_damp"])) for f in clean)
@@ -94,7 +109,7 @@ def main():
     for name, inj in pi.INJECTORS.items():
         sess = record_session(inj)
         json.dump(sess, open(os.path.join(SESS_DIR, f"injected_{name}.json"), "w"))
-        res = audit_session(sess)
+        res = audit_session(sess, v_max=vmax, w_max=wmax)
         matrix[name] = res
         tgt = pi.EXPECTED_CHECK[name]
         tgt_red = any((not c["ok"]) and c["check"] == tgt for c in res["checks"])
@@ -201,7 +216,8 @@ def make_matrix_figure(matrix):
             "门P2：清洁动力学三项全绿、零误报（残差≈机器精度）  |  "
             "门P1：P-1..P-5 五类物理自欺各被能量审计判红并定位——物理审计自身已被证明「能抓假」",
             ha="center", va="center", fontsize=9, color="#333")
-    out = os.path.join(HERE, "energy_redgreen_matrix.png")
+    suffix = f"_{CONTROL_MODE.lower()}mode"
+    out = os.path.join(HERE, f"energy_redgreen_matrix{suffix}.png")
     fig.savefig(out, dpi=150, bbox_inches="tight")
     print(f"\n  [OK] 红绿矩阵图已保存: {out}")
 

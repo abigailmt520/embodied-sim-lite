@@ -25,10 +25,12 @@ from stable_baselines3.common.callbacks import CheckpointCallback, BaseCallback
 from embodied_env import EmbodiedNavEnv
 
 # ====================== 训练超参 ======================
-# 可由环境变量覆盖（dev/stage1-dynamics 分支：默认产出 *_dyn 权重，绝不覆盖论文 .pth）
+# 可由环境变量覆盖（dev 分支：默认产出 *_dyn 权重，绝不覆盖论文 .pth / dyn.pth）
 TOTAL_TIMESTEPS = int(os.environ.get("EMBODIED_TIMESTEPS", 1_000_000))  # 总训练步数
-MODEL_PATH = os.environ.get("EMBODIED_MODEL_PATH", "ppo_embodied_agent_dyn.pth")  # 动力学版权重
+CONTROL_MODE = os.environ.get("EMBODIED_CONTROL_MODE", "A")             # 'A'=目标速度 / 'B'=力控
+MODEL_PATH = os.environ.get("EMBODIED_MODEL_PATH", "ppo_embodied_agent_dyn.pth")  # 权重输出
 SB3_NATIVE_PATH = os.environ.get("EMBODIED_SB3_PATH", "ppo_embodied_agent_dyn")   # SB3 原生 zip
+CKPT_PREFIX = os.environ.get("EMBODIED_CKPT_PREFIX", "ppo_dyn_ckpt")    # 检查点前缀
 TB_LOG_DIR = "./tb_embodied/"      # TensorBoard 日志目录
 CHECKPOINT_DIR = "./checkpoints/"  # 周期性检查点目录
 
@@ -54,11 +56,21 @@ class RewardLogCallback(BaseCallback):
         return True
 
 
+# —— 涌现 gaming 实验：训练期可注入 G-1「高速白拿推力」可利用故障 ——
+#    EMBODIED_BOOST_FORCE>0 即激活；智能体若学会越过 thresh 享受免费加速 = 涌现式 gaming。
+BOOST_FORCE = float(os.environ.get("EMBODIED_BOOST_FORCE", 0.0))
+BOOST_THRESH = float(os.environ.get("EMBODIED_BOOST_THRESH", 1.05))
+
+
 def make_env():
     """构造单环境（Monitor 包裹以采集回合统计）。
     单核满载场景下用 DummyVecEnv 单实例即可；若放开多核，把这里改成
     SubprocVecEnv + 多个 make_env 即可线性提速。"""
-    env = EmbodiedNavEnv(render_mode=None)
+    env = EmbodiedNavEnv(render_mode=None, control_mode=CONTROL_MODE)
+    if BOOST_FORCE > 0.0:
+        # G-1 可利用物理故障在训练环境中常驻（藏积分器内）；智能体可涌现式利用。
+        env.physics_fault = {"mode": "G-1_speed_boost",
+                             "boost_force": BOOST_FORCE, "boost_thresh": BOOST_THRESH}
     env = Monitor(env)
     return env
 
@@ -90,7 +102,7 @@ def main():
     callbacks = [
         RewardLogCallback(),
         CheckpointCallback(save_freq=50_000, save_path=CHECKPOINT_DIR,
-                           name_prefix="ppo_dyn_ckpt"),
+                           name_prefix=CKPT_PREFIX),
     ]
 
     print(">>> 进入超实时训练循环（无网络/无异步时钟，单核满载）...")

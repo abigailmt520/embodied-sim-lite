@@ -131,8 +131,13 @@ def check_actuator_bound(session, v_max=V_PHYS_MAX, w_max=W_PHYS_MAX):
 CHECKS = [check_energy_budget, check_no_free_energy, check_actuator_bound]
 
 
-def audit_session(session):
-    results = [c(session) for c in CHECKS]
+def audit_session(session, v_max=V_PHYS_MAX, w_max=W_PHYS_MAX):
+    """对账本 session 跑 EC1/EC2/EC3。v_max/w_max 为执行器物理速度上限（A/B 模式不同）。"""
+    results = [
+        check_energy_budget(session),
+        check_no_free_energy(session),
+        check_actuator_bound(session, v_max=v_max, w_max=w_max),
+    ]
     passed = all(r["ok"] for r in results)
     return {"passed": passed, "verdict": "GREEN" if passed else "RED", "checks": results}
 
