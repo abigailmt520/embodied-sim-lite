@@ -40,7 +40,7 @@
 | **物理保真度** | 简化动力学（质量/惯量/黏性阻尼）+ **F4 矩形碰撞**（圆-AABB 穿透推出+回弹 e=0.5）；能量+碰撞账本精确电报（清洁残差 ~1e-16 J）。**未含**刚体接触动力学 |
 | **契约层审计** | C1 真分叉 / C2 帧序单调 / C3 断流即冻结（**未改、回归通过**）；**+ CI 互信息泄漏审计**（I(Δodom;Δtruth)≤噪声预算界，C1 原理化泛化，可估区 slip≈0.3 抓 L-1/L-2/L-3） |
 | **物理层审计** | EC1 能量预算 / EC2 无凭空能量 / EC3 执行器上限 / EC4 碰撞非负 / EC5 非穿透(账本) / **EC5' 真值-vs-地图(物理内几何重算，不信任账本)**。注入器 P-1..P-5 + CF-1..CF-3（EC5' 零误报，仅真值真穿墙时红）|
-| **联合审计（report×physics 常驻）** | `audit_suite` + `joint_audit`：JOINT odom-vs-声称地图。**判据分离**：EC5' 红⇒物理内单层可抓(非耦合)；EC5' 绿 ∧ JOINT 红⇒真耦合（唯联合可抓）。三层常驻套件 `run_suite`（Phase4/4b）|
+| **联合审计（report×physics 常驻）** | `audit_suite` + `joint_audit`：JOINT odom-vs-声称地图。**判据分离**：EC5' 红⇒物理内单层可抓(非耦合)；EC5' 绿 ∧ JOINT 红⇒真耦合（唯联合可抓）。三层常驻套件 `run_suite`（Phase4/4b）。**🔴 G5 边界**：朴素 JOINT 有**轨迹长度有效包络**——短程(≤40步, odom 漂移<0.15m)零误报且唯抓真耦合(场景B)，长程(≥160步, 累积漂移>1m)健康 odom 漂入墙→100%误报；部署须短滑窗/漂移预算门控 |
 | **里程计** | 真分叉 odom（吃实际速度 v_act + 打滑漂移），C1 保留；碰撞不修正 odom（守"只漂移不校正"） |
 | **地图** | `random_circle` 10×10 随机圆（默认，零回归）/ `maze` **40×40 手工墙体迷宫**（19 AABB，射线-AABB 雷达 + 圆-矩形碰撞）。**未含**动态障碍 |
 | **碰撞语义** | `terminate`（撞即终止，论文版）/ `bounce`（穿透推出+回弹+每步接触惩罚 R_CONTACT、不终止，迷宫导航用） |
@@ -137,6 +137,16 @@
 - **🔴 诚实（非全赢）**：data_tamper **唯 code-integrity 抓、我们 miss**（信任根盲区，互补非被支配）；L-2 部分泄漏**全员 miss**（MI 抬升 +0.23 在余量内，样本/轨迹敏感，与 Phase3 一致，未硬压过阈）。
 - 详情：[docs/RQ4-Coverage-Matrix.md](docs/RQ4-Coverage-Matrix.md)。
 
+### G5 · 统计严格性（dev/integrated，纯审计层 harness；含 Phase4b+G1+RQ4 分支整合）
+- **目标**：给检测/误报加统计严格性——重复(30/24 独立 seed) + Wilson 95% CI + 边界刻画，到可投稿(TOSEM/ISSTA)标准。
+- **整合(housekeeping)**：三平行分支 Phase4b/G1/RQ4 合并入 **`dev/integrated`**（merge `b562806`），作最终复现 artifact；G5 在此分支上跑。master `7b54625` 冻结、.pth 零改动。
+- **A/B 带 CI 覆盖矩阵**（30 seed × 9 实例 × 5 方法）：强检测确定性、CI[88.6,100]；健康 **M1-M4 误报 0/30**（CI[0,11.4]）；强检测跨 seed 鲁棒 M5 各 100%（CI[88.6,100]）。
+- **🔴 关键诚实发现（统计揭示单点测试漏的误报）**：朴素 **M5(含 joint) 健康 320 步误报 30/30=100%** ——非 bug：无碰撞修正的 odom 航迹推算随**轨迹长度**累积漂移(航向积分,~6m)漂入墙几何（真值 EC5' 恒绿合法）→ joint 误报。RQ4/Phase4 单条短/弧形轨迹恰好未触发，30 条多样轨迹统计揭示之。
+- **Part D · joint 有效包络（诚实刻画，未调参）**：健康 joint 误报 vs 轨迹长度——20步 0/30、40步 0/30(漂移0.14m)、80步 1/30、160步 30/30、320步 30/30(漂移5.8m)。**场景B(40步, 伪造散度3.5m≫0.14m诚实漂移)落在有效包络内→唯 joint 抓**。部署须**短滑窗/漂移预算门控**。亦揭示 **CI(需长程)与 joint(需短程)横程需求相反**的结构张力。
+- **Part C · L2/CI 灵敏度边界（把单点 L-2 观察变成曲线）**：①检测率 vs 泄漏幅度(N=1000)：shrink≤0.25 CI 下界>50%、shrink≥0.6 全 miss；②检测率 vs 样本量(shrink=0.25=L-2)：**非单调**，250→50%、500/1000→83%、1500→37.5%、2000→25%（KSG 有限样本偏置+固定余量：甜区 ~500-1000；RQ4 用 300 增量恰在阈下→漏，此处量化所需样本边界）。
+- **产物**：`audit/run_g5_statistics.py`、`audit/g5_sensitivity.png`(3 面板)、`audit/g5_stats.json`。无回归（env 未改、纯审计层）。
+- 详情：[docs/G5-Statistical-Rigor.md](docs/G5-Statistical-Rigor.md)。
+
 ---
 
 ## 3. 关键复现命令
@@ -162,6 +172,8 @@ python audit/run_collision_audit.py       # → collision_redgreen_matrix.png（
 python audit/run_leakage_audit.py         # → leakage_compare.png（slip 0.30/0.05 双区）
 # 双态耦合压测 report×physics（真/假耦合判据）
 python audit/run_coupling_test.py         # → coupling_summary.json（场景A非耦合/场景B真耦合）
+# G5 统计严格性（Wilson CI 覆盖矩阵 + joint 有效包络 + L2/CI 灵敏度曲线）
+python audit/run_g5_statistics.py         # → g5_sensitivity.png（3面板）, g5_stats.json
 # 契约层回归
 python audit/run_action1.py
 ```
