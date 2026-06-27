@@ -3,7 +3,7 @@
 > **单一累积文档**：每个平台迭代任务都更新此处。记录各 Phase 的设计决策/实现/验证（真实数字），
 > 以及**当前平台状态**（分支、权重、能力、局限）。目的：平台演进可追溯，未来接手者/AI 不必重新逆向。
 > 🔴 红线：master `7b54625`（已投稿论文版）**永久冻结**；所有迭代在 dev 分支；论文权重不覆盖。
-> 最后更新：2026-06-27（**dev/integrated**：Phase4b + G1 + RQ4 整合 + G5 统计严格性）
+> 最后更新：2026-06-27（**dev/integrated**：Phase4b + G1 + RQ4 整合 + G5 统计严格性 + 场景B拓扑不可约性）
 
 ---
 
@@ -40,7 +40,7 @@
 | **物理保真度** | 简化动力学（质量/惯量/黏性阻尼）+ **F4 矩形碰撞**（圆-AABB 穿透推出+回弹 e=0.5）；能量+碰撞账本精确电报（清洁残差 ~1e-16 J）。**未含**刚体接触动力学 |
 | **契约层审计** | C1 真分叉 / C2 帧序单调 / C3 断流即冻结（**未改、回归通过**）；**+ CI 互信息泄漏审计**（I(Δodom;Δtruth)≤噪声预算界，C1 原理化泛化，可估区 slip≈0.3 抓 L-1/L-2/L-3） |
 | **物理层审计** | EC1 能量预算 / EC2 无凭空能量 / EC3 执行器上限 / EC4 碰撞非负 / EC5 非穿透(账本) / **EC5' 真值-vs-地图(物理内几何重算，不信任账本)**。注入器 P-1..P-5 + CF-1..CF-3（EC5' 零误报，仅真值真穿墙时红）|
-| **联合审计（report×physics 常驻）** | `audit_suite` + `joint_audit`：JOINT odom-vs-声称地图。**判据分离**：EC5' 红⇒物理内单层可抓(非耦合)；EC5' 绿 ∧ JOINT 红⇒真耦合（唯联合可抓）。三层常驻套件 `run_suite`（Phase4/4b）。**🔴 G5 边界**：朴素 JOINT 有**轨迹长度有效包络**——短程(≤40步, odom 漂移<0.15m)零误报且唯抓真耦合(场景B)，长程(≥160步, 累积漂移>1m)健康 odom 漂入墙→100%误报；部署须短滑窗/漂移预算门控 |
+| **联合审计（report×physics 常驻）** | `audit_suite` + `joint_audit`：JOINT odom-vs-声称地图。**判据分离**：EC5' 红⇒物理内单层可抓(非耦合)；EC5' 绿 ∧ JOINT 红⇒真耦合（唯联合可抓）。三层常驻套件 `run_suite`（Phase4/4b）。**🔴 G5 边界**：朴素 JOINT 有**轨迹长度有效包络**——短程(≤40步, odom 漂移<0.15m)零误报且唯抓真耦合(场景B)，长程(≥160步, 累积漂移>1m)健康 odom 漂入墙→100%误报；部署须短滑窗/漂移预算门控。**🔴 拓扑不可约**：场景B重配为「位移跨墙」(端点皆自由、d<ξ)后，带地图契约(o∈M?/o轨迹自穿)也**漏**，唯关系型 seg(x_t,o_t)穿墙可抓 → 关系型层非冗余（`relational_oracle.py`，§ScenB-Irreducibility）|
 | **里程计** | 真分叉 odom（吃实际速度 v_act + 打滑漂移），C1 保留；碰撞不修正 odom（守"只漂移不校正"） |
 | **地图** | `random_circle` 10×10 随机圆（默认，零回归）/ `maze` **40×40 手工墙体迷宫**（19 AABB，射线-AABB 雷达 + 圆-矩形碰撞）。**未含**动态障碍 |
 | **碰撞语义** | `terminate`（撞即终止，论文版）/ `bounce`（穿透推出+回弹+每步接触惩罚 R_CONTACT、不终止，迷宫导航用） |
@@ -147,6 +147,15 @@
 - **产物**：`audit/run_g5_statistics.py`、`audit/g5_sensitivity.png`(3 面板)、`audit/g5_stats.json`。无回归（env 未改、纯审计层）。
 - 详情：[docs/G5-Statistical-Rigor.md](docs/G5-Statistical-Rigor.md)。
 
+### 场景 B 拓扑不可约性（dev/integrated，纯审计层；§5 核心论点防御）
+- **攻击**：外部形式化审稿人质疑「双态耦合不可约」——场景 B 只是「把地图给契约层、查 o_t 在墙里吗」就能抓 → 关系型层冗余。
+- **防御（拓扑不可约）**：把场景 B 从「o_t 落墙里」（旧形式·可约）**重配**为「**位移跨墙**」——真值 x_t 在墙 A 侧自由、报告 o_t 在墙 B 侧自由（**不在墙里**）、‖o_t−x_t‖≤ξ，唯**位移向量 o_t−x_t 跨刚性墙**。前置 **墙厚 d=0.20 < 噪声预算 ξ=0.50**。
+- **五路预言实测（重配 v2）**：①物理(x∈free)🟢 ②契约噪声(‖o-x‖≤ξ)🟢 ③**带地图契约 M6a(o∈M?)🟢漏** ④**更强 report-only M6b(seg(o,o)∩M)🟢漏**，唯 ⑤**关系型 seg(x,o)穿墙(端点皆自由) 🔴抓(60/60)** → **`IRREDUCIBLE_RELATIONAL`**：带地图契约也分解不出 → 关系型层**非冗余**。
+- **🔴 诚实判据满足**：带地图 baseline **未**抓到 v2 → 不可约**成立**（实测、未调参）。对照旧 v1：M6a 🔴抓(o_t 真落墙)→ 可约，坐实重配的价值。
+- **🔴 诚实代价（d<ξ 双刃）**：同一 d<ξ 让诚实噪声在薄墙附近偶发跨墙——M6a/M6b 健康误报 30/30、关系型单帧 25/30；但**持续性门控**(穿墙帧占比：健康 max=0.38 < 阈0.5 < v2=1.00)后**关系型健康 0/30、v2 仍抓** → 唯关系型能同时对 v2 敏感、对健康特异（与 G5 Part D 同源）。
+- **产物**：`audit/relational_oracle.py`(五路预言)、`audit/run_scenB_irreducibility.py`、`audit/scenB_irreducibility.{json,png}`。无回归（env 未改）。
+- 详情：[docs/ScenB-Irreducibility.md](docs/ScenB-Irreducibility.md)。
+
 ---
 
 ## 3. 关键复现命令
@@ -174,6 +183,8 @@ python audit/run_leakage_audit.py         # → leakage_compare.png（slip 0.30/
 python audit/run_coupling_test.py         # → coupling_summary.json（场景A非耦合/场景B真耦合）
 # G5 统计严格性（Wilson CI 覆盖矩阵 + joint 有效包络 + L2/CI 灵敏度曲线）
 python audit/run_g5_statistics.py         # → g5_sensitivity.png（3面板）, g5_stats.json
+# 场景B 拓扑不可约性（带地图契约也漏 v2、唯关系型抓；§5 防御）
+python audit/run_scenB_irreducibility.py  # → scenB_irreducibility.{json,png}
 # 契约层回归
 python audit/run_action1.py
 ```

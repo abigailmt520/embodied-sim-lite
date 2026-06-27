@@ -1,0 +1,124 @@
+{
+  "params": {
+    "d": 0.2,
+    "xi": 0.5,
+    "d_lt_xi": true,
+    "N": 60,
+    "radius": 0.0,
+    "persist_frac": 0.5
+  },
+  "scenB_v2": {
+    "physics": {
+      "check": "PHYSICS[x∈free]",
+      "ok": true,
+      "detail": "真值落墙帧=0（应 0=合法）",
+      "n_illegal": 0
+    },
+    "contract_noise": {
+      "check": "CONTRACT_NOISE[‖o-x‖≤ξ]",
+      "ok": true,
+      "detail": "max‖o-x‖=0.450 ≤ ξ=0.500",
+      "max_err": 0.45000000000000284
+    },
+    "map_point": {
+      "check": "MAP_POINT[o∈M? · M6a]",
+      "ok": true,
+      "detail": "上报点落墙帧=0（>0 才能抓；=0=漏）",
+      "n_illegal": 0
+    },
+    "map_continuity": {
+      "check": "MAP_CONTINUITY[seg(o,o)∩M · M6b]",
+      "ok": true,
+      "detail": "上报轨迹自穿墙段=0（>0 才能抓；=0=漏）",
+      "n_cross": 0
+    },
+    "relational": {
+      "check": "RELATIONAL[seg(x,o)穿M·端点皆自由]",
+      "ok": false,
+      "detail": "位移段穿墙(端点皆自由)帧=60/60 (frac=1.00 >阈0.50→抓)",
+      "n_cross": 60,
+      "frac": 1.0
+    },
+    "verdict": "IRREDUCIBLE_RELATIONAL"
+  },
+  "scenB_v1_old": {
+    "physics": {
+      "check": "PHYSICS[x∈free]",
+      "ok": true,
+      "detail": "真值落墙帧=0（应 0=合法）",
+      "n_illegal": 0
+    },
+    "contract_noise": {
+      "check": "CONTRACT_NOISE[‖o-x‖≤ξ]",
+      "ok": false,
+      "detail": "max‖o-x‖=3.500 > ξ=0.500",
+      "max_err": 3.5
+    },
+    "map_point": {
+      "check": "MAP_POINT[o∈M? · M6a]",
+      "ok": false,
+      "detail": "上报点落墙帧=8（>0 才能抓；=0=漏）",
+      "n_illegal": 8
+    },
+    "map_continuity": {
+      "check": "MAP_CONTINUITY[seg(o,o)∩M · M6b]",
+      "ok": false,
+      "detail": "上报轨迹自穿墙段=9（>0 才能抓；=0=漏）",
+      "n_cross": 9
+    },
+    "relational": {
+      "check": "RELATIONAL[seg(x,o)穿M·端点皆自由]",
+      "ok": true,
+      "detail": "位移段穿墙(端点皆自由)帧=20/41 (frac=0.49 ≤阈0.50→放行)",
+      "n_cross": 20,
+      "frac": 0.4878048780487805
+    },
+    "verdict": "REDUCIBLE_BY_MAP_CONTRACT"
+  },
+  "specificity": {
+    "n_seed": 30,
+    "healthy_frac_mean": 0.10499999999999998,
+    "healthy_frac_max": 0.38333333333333336,
+    "scenB_v2_frac": 1.0,
+    "map_point_fp": 30,
+    "map_cont_fp": 30,
+    "rel_singleframe_fp": 25,
+    "rel_persist_fp": 0,
+    "clean_separation": true
+  },
+  "matrix": {
+    "cols": [
+      "①物理",
+      "②噪声",
+      "③M6a带图点",
+      "④M6b自穿",
+      "⑤关系型"
+    ],
+    "healthy": {
+      "physics": true,
+      "contract_noise": false,
+      "map_point": false,
+      "map_continuity": false,
+      "relational": true
+    },
+    "scenB_v1_old": {
+      "physics": true,
+      "contract_noise": false,
+      "map_point": false,
+      "map_continuity": false,
+      "relational": true
+    },
+    "scenB_v2_new": {
+      "physics": true,
+      "contract_noise": true,
+      "map_point": true,
+      "map_continuity": true,
+      "relational": false
+    }
+  },
+  "verdict": {
+    "scenB_v2_irreducible": true,
+    "scenB_v1_reducible_by_map": true,
+    "claim_holds": true
+  }
+}
