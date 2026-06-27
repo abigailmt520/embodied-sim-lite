@@ -3,7 +3,7 @@
 > **单一累积文档**：每个平台迭代任务都更新此处。记录各 Phase 的设计决策/实现/验证（真实数字），
 > 以及**当前平台状态**（分支、权重、能力、局限）。目的：平台演进可追溯，未来接手者/AI 不必重新逆向。
 > 🔴 红线：master `7b54625`（已投稿论文版）**永久冻结**；所有迭代在 dev 分支；论文权重不覆盖。
-> 最后更新：2026-06-27（Phase4b 完成）
+> 最后更新：2026-06-27（RQ4 覆盖矩阵完成；G1 PyBullet 在 dev/g1-pybullet 平行分支）
 
 ---
 
@@ -19,6 +19,8 @@
 | `dev/stage4-mi-leakage` | Phase3：契约层互信息泄漏审计（CI，C1 原理化泛化） | Phase2 `3cc426e` |
 | `dev/stage5-coupling` | Phase4：双态耦合压测（report×physics 联合审计 + 真/假耦合判据） | Phase3 `af81e14` |
 | `dev/stage6-ec5prime` | Phase4b：EC5'（物理内真值-vs-地图）+ 常驻三层套件（判据分离收尾） | Phase4 `9f188b1` |
+| `dev/g1-pybullet` | G1：真引擎(PyBullet)泛化——审计抓引擎原生病理（非循环）（平行分支，off Phase4b）| Phase4b `57dbca8` |
+| `dev/rq4-coverage` | RQ4：覆盖矩阵 vs 4 baseline——证 joint 非冗余（off Phase4b）| Phase4b `57dbca8` |
 
 ### 1.2 权重文件（各自配置，互不覆盖）
 | 文件 | 配置 | 性能(N=25/30 固定种子) | 所在分支 |
@@ -117,6 +119,14 @@
 - **🔴 诚实判据**：EC5' **零误报**（30 回合健康 maze 0/30；CF-2/幽灵墙真值真穿墙才红=真违反非误报）；EC5' 未替 joint 充数（场景 B EC5' 绿）；判据分离干净。**未调参硬压。**
 - 无回归（CF 3/3、P 5/5、C1-3、CI 3/3）；env 未改。
 - 详情：[docs/Phase4b-EC5prime-Suite.md](docs/Phase4b-EC5prime-Suite.md)。
+
+### RQ4 · 覆盖矩阵 vs 4 baseline（dev/rq4-coverage, 本次，纯审计层 harness）
+- **目标**：证分层+联合覆盖面比 baseline 广——尤其 **joint 非冗余、是抓双态耦合(场景B)的唯一手段**。
+- **4 公平 baseline（不 strawman）**：M1 代码/数据完整性、M2 物理-only、M3 契约-only、M4 朴素并行(无joint)；M5=我们(含joint)。
+- **逐格真实验证**（10 实例 × 5 方法）：① 健康零误报；② code-integrity 唯抓 data_tamper、miss 全部语义；③ 单层各 miss 另一类。
+- **🔴 头条**：**M4 朴素并行 miss 场景B（双态耦合）；唯 M5(joint) 抓** → joint 非冗余、必要（场景B 物理EC5'绿+契约绿、唯 odom-vs-地图跨态抓）。
+- **🔴 诚实（非全赢）**：data_tamper **唯 code-integrity 抓、我们 miss**（信任根盲区，互补非被支配）；L-2 部分泄漏**全员 miss**（MI 抬升 +0.23 在余量内，样本/轨迹敏感，与 Phase3 一致，未硬压过阈）。
+- 详情：[docs/RQ4-Coverage-Matrix.md](docs/RQ4-Coverage-Matrix.md)。
 
 ---
 
