@@ -3,7 +3,7 @@
 > **单一累积文档**：每个平台迭代任务都更新此处。记录各 Phase 的设计决策/实现/验证（真实数字），
 > 以及**当前平台状态**（分支、权重、能力、局限）。目的：平台演进可追溯，未来接手者/AI 不必重新逆向。
 > 🔴 红线：master `7b54625`（已投稿论文版）**永久冻结**；所有迭代在 dev 分支；论文权重不覆盖。
-> 最后更新：2026-06-27（G1 PyBullet 泛化完成）
+> 最后更新：2026-06-27（**dev/integrated**：Phase4b + G1 + RQ4 整合 + G5 统计严格性）
 
 ---
 
@@ -20,6 +20,8 @@
 | `dev/stage5-coupling` | Phase4：双态耦合压测（report×physics 联合审计 + 真/假耦合判据） | Phase3 `af81e14` |
 | `dev/stage6-ec5prime` | Phase4b：EC5'（物理内真值-vs-地图）+ 常驻三层套件（判据分离收尾） | Phase4 `9f188b1` |
 | `dev/g1-pybullet` | G1：真引擎(PyBullet)泛化——审计抓引擎原生病理（非循环）+ 契约/joint 移植 3D | Phase4b `57dbca8` |
+| `dev/rq4-coverage` | RQ4：覆盖矩阵 vs 4 baseline——证 joint 非冗余 | Phase4b `57dbca8` |
+| **`dev/integrated`** | **整合 Phase4b+G1+RQ4 + G5 统计严格性（最终复现 artifact 分支）** | merge |
 
 ### 1.2 权重文件（各自配置，互不覆盖）
 | 文件 | 配置 | 性能(N=25/30 固定种子) | 所在分支 |
@@ -119,13 +121,21 @@
 - 无回归（CF 3/3、P 5/5、C1-3、CI 3/3）；env 未改。
 - 详情：[docs/Phase4b-EC5prime-Suite.md](docs/Phase4b-EC5prime-Suite.md)。
 
-### G1 · 真引擎(PyBullet)泛化（dev/g1-pybullet, 本次，独立 conda env，2D 平台不改）
+### G1 · 真引擎(PyBullet)泛化（dev/g1-pybullet, 独立 conda env，2D 平台不改）
 - **决策（破循环论证·最大 publishability 缺口）**：测审计能否抓**我们没造的引擎(PyBullet)自己的原生数值病理**（强测·非循环），而非把我们的注入器搬过去（弱测·半循环）。
 - **G1a 基线（检查点1 ✅）**：刻画引擎能量噪声本底 **8.3e-4 J/step**（阈值取 10×）；移植教训=PyBullet 默认阻尼悄抽能量、EC5' 2D 投影须平面运动。修正 setup 后健康**零误报**。
 - **G1b 高速穿模（检查点2 ✅ 皇冠·非循环）**：200 m/s 球真穿墙、**引擎自报穿透=0（完全漏检）**，逐帧点检测也漏、**唯 EC5' 扫掠抓到**——审计抓到引擎真实病理。精化=高速穿模须扫掠线段检测。
 - **G1c**：能量注入（弹性反弹 e=1，引擎离散求解器注入能量 E0=19.6→42.7J）→ 能量守恒上界审计**抓**；契约 C1-C3 移植 3D 健康零误报+注入器（odom=truth/seq冻结）各抓；joint 3D 工作。warm-start 幽灵力**未干净测出**（隔离难，诚实负/不定）。
 - **诚实总纲**：只设诱发条件、零手设故障（引擎穿透=0 为铁证）；健康零误报（噪声本底已刻画）；信任根边界=PyBullet API 撒谎 out of scope（与 2D q 类同源）。
 - 详情：[docs/G1-PyBullet-Generalization.md](docs/G1-PyBullet-Generalization.md)。
+
+### RQ4 · 覆盖矩阵 vs 4 baseline（dev/rq4-coverage, 纯审计层 harness）
+- **目标**：证分层+联合覆盖面比 baseline 广——尤其 **joint 非冗余、是抓双态耦合(场景B)的唯一手段**。
+- **4 公平 baseline（不 strawman）**：M1 代码/数据完整性、M2 物理-only、M3 契约-only、M4 朴素并行(无joint)；M5=我们(含joint)。
+- **逐格真实验证**（10 实例 × 5 方法）：① 健康零误报；② code-integrity 唯抓 data_tamper、miss 全部语义；③ 单层各 miss 另一类。
+- **🔴 头条**：**M4 朴素并行 miss 场景B（双态耦合）；唯 M5(joint) 抓** → joint 非冗余、必要（场景B 物理EC5'绿+契约绿、唯 odom-vs-地图跨态抓）。
+- **🔴 诚实（非全赢）**：data_tamper **唯 code-integrity 抓、我们 miss**（信任根盲区，互补非被支配）；L-2 部分泄漏**全员 miss**（MI 抬升 +0.23 在余量内，样本/轨迹敏感，与 Phase3 一致，未硬压过阈）。
+- 详情：[docs/RQ4-Coverage-Matrix.md](docs/RQ4-Coverage-Matrix.md)。
 
 ---
 
