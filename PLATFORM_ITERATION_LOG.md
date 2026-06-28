@@ -158,6 +158,15 @@
 - **接入常驻套件 + 回归**：关系型预言并入 `audit_suite.run_suite` 联合层（两路互补：朴素点查+关系型，`JOINT_PERSIST_FRAC=0.5`）；`run_coupling_test.py` 增**场景 B2（位移跨墙）**回归——物理🟢+契约🟢+EC5'🟢+朴素点查🟢(漏)，唯**关系型🔴抓**→ `TRUE_COUPLING`，坐实不可约自欺已被常驻套件覆盖。场景 A/B 判定不变、契约 action1 三门、无回归；master `7b54625` 冻结、.pth 零改动。
 - 详情：[docs/ScenB-Irreducibility.md](docs/ScenB-Irreducibility.md)（§8 接入+回归）。
 
+### Cross-Fidelity 跨保真自欺审计 · D2 能量对照（dev/integrated，纯新增模块；回击"玩具平台/手注入"批评）
+- **论点**：**内部一致 ≠ 与现实一致**——过全部内部预言(EC1–EC5)的简化孪生仍可在接触处账面能量背离高保真现实。
+- **Setup**：PyBullet(物理现实 truth) 与 2D 孪生(简化模型 report) 同进程脚本动作双跑（`g1_pybullet/cross_fidelity.py`；g1-pybullet env 补 gymnasium、**不引 torch**）。匹配机器人逐项对齐（质量1/Izz0.5/半径0.20/黏阻−C·v/24子步对齐/有效 e≈0.499≈BOUNCE）；**自由段验证干净（|ΔE|≤0.014J、位置≤0.023m=FP本底）**；唯一实质 gap=接触物理（2D `v*=0.5`标量砍半+钉墙、无向量反射/摩擦 vs PyBullet 真接触）。
+- **🔴 D2 核心对照**：恒力撞墙，**2D 孪生 EC1–EC5 全 PASS（内部自洽）**，**跨保真能量预言抓到接触发散**（阈 5×本底=0.0715J；head_on 发散0.179J、glancing 0.105J，均 FLAG）。head_on 最直观：**两者同钉 x=1.80m，但孪生账面幻报 0.032–0.18J 动能、PyBullet 真实归零**（同位不同能）。
+- **D3 包络**：扫入射角 0–75°——**跨保真预言 5/6 FLAG、2D EC 6/6 PASS**；75° 未达墙=真阴性（非漏检）。**D1 轨迹发散**(glancing 0.313m)可约、如实标注（不可约留 scenB Table 2）。
+- **🔴 诚实 complication**：发散符号随几何变（head_on 高报/glancing 低报→真实 gap 是整个粗接触模型非单纯"缺摩擦"）；发散非单调于角；emergent（只设控制+墙+摩擦，未手 pin 发散）。**不 over-claim 不可约**。
+- **产物**：`g1_pybullet/cross_fidelity.py`、`cross_fidelity_energy.{json,png}`(3面板)。2D 平台零改动、master 冻结、.pth 零改动。
+- 详情：[docs/CrossFidelity-Energy.md](docs/CrossFidelity-Energy.md)。
+
 ---
 
 ## 3. 关键复现命令
@@ -187,6 +196,8 @@ python audit/run_coupling_test.py         # → coupling_summary.json（场景A�
 python audit/run_g5_statistics.py         # → g5_sensitivity.png（3面板）, g5_stats.json
 # 场景B 拓扑不可约性（带地图契约也漏 v2、唯关系型抓；§5 防御）
 python audit/run_scenB_irreducibility.py  # → scenB_irreducibility.{json,png}
+# Cross-Fidelity D2 能量对照（孪生过自检 vs 跨保真预言抓接触发散；独立 conda env）
+conda run -n g1-pybullet python g1_pybullet/cross_fidelity.py  # → cross_fidelity_energy.{json,png}
 # 契约层回归
 python audit/run_action1.py
 ```

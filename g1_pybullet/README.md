@@ -10,15 +10,19 @@ conda create -n g1-pybullet -c conda-forge python=3.13 pybullet numpy scipy matp
 ```
 
 ## 运行
+注：`cross_fidelity.py` 需在 env 内补 `gymnasium`（`conda run -n g1-pybullet pip install gymnasium`，**不引 torch/sb3**）。
 ```bash
 conda run -n g1-pybullet python g1_pybullet/g1a_baseline.py     # 健康基线 + 噪声本底（检查点1）
 conda run -n g1-pybullet python g1_pybullet/g1b_tunneling.py    # 原生高速穿模 → 物理审计（检查点2·皇冠）
 conda run -n g1-pybullet python g1_pybullet/g1c_pathologies.py  # 能量注入 + 契约层 + joint（3D）
+conda run -n g1-pybullet python g1_pybullet/cross_fidelity.py   # Cross-Fidelity D2 能量对照（孪生过自检 vs 跨保真预言）
 ```
 
 ## 文件
 - `pb_helpers.py` —— 场景/孪生上报(OdomReporter)/不变量/审计复用层（含扫掠 EC5'、能量守恒上界）。
 - `g1a_baseline.py` / `g1b_tunneling.py` / `g1c_pathologies.py` —— 三阶段。
+- `cross_fidelity.py` —— **Cross-Fidelity D2 能量对照**：PyBullet(现实) vs 2D 简化孪生(report) 同进程双跑，
+  证"内部一致≠与现实一致"（孪生过 EC1–EC5，接触处账面能量被跨保真预言抓背离）。详见 `../docs/CrossFidelity-Energy.md`。
 
 ## 关键结果（详见 ../docs/G1-PyBullet-Generalization.md）
 - 引擎能量噪声本底 ≈ 8.3e-4 J/step（审计阈值须 > 此）。
