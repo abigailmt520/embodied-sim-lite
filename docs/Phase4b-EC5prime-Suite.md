@@ -23,8 +23,11 @@ Phase4 已证真耦合（场景 B）存在，并诚实指出：场景 A（agent 
 - **契约层（report 自洽）**：C1 真分叉 / C2 帧序单调 / C3 断流即冻结 / CI 互信息泄漏。
 - **物理层（physics 自洽）**：EC1 能量预算 / EC2 无凭空能量 / EC3 执行器上限 / EC4 碰撞非负 /
   EC5 非穿透(账本) / **EC5' 真值-vs-地图(物理内几何重算)**。
-- **联合层（report×physics 跨态）**：JOINT odom-vs-声称地图（`joint_report_vs_map` `:73`）。
-- 耦合判据 `coupling_label`（`:87`）：EC5' 红 ⇒ PHYSICS_INTERNAL（物理内单层可抓，非耦合）；
+- **联合层（report×physics 跨态）**：JOINT odom-vs-声称地图（`joint_report_vs_map`）。
+  - **🔴 后续扩展（见 [docs/ScenB-Irreducibility.md](ScenB-Irreducibility.md) §8）**：联合层后并入**第二路**
+    关系型 `relational_oracle`（through-cross + 持续性门控），抓「位移跨墙·拓扑不可约」自欺（朴素点查漏）。
+    联合层红 ⟺ 任一路红；`run_coupling_test.py` 增场景 B2 回归坐实。
+- 耦合判据 `coupling_label`：EC5' 红 ⇒ PHYSICS_INTERNAL（物理内单层可抓，非耦合）；
   EC5' 绿 ∧ JOINT 红 ⇒ TRUE_COUPLING（唯联合可抓）。
 
 ---

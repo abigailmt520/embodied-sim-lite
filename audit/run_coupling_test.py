@@ -34,6 +34,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 WALLS = EmbodiedNavEnv.MAZE_WALLS
 RADIUS = EmbodiedNavEnv.ROBOT_RADIUS
 PHANTOM_IDX = 4          # 幽灵掉的墙：死亡长廊左墙 (28,29,5,33)
+THIN_WALL = [(30.0, 30.2, 9.0, 16.0)]   # 薄墙 d=0.20 < ξ（场景 B2 位移跨墙·拓扑不可约接入回归用）
 
 
 def _energy_row(env):
@@ -95,6 +96,29 @@ def scenario_b():
     return truth, odom, eledger
 
 
+# ====================================================================
+# 场景 B2：重配「位移跨墙」真耦合（拓扑不可约）——朴素点查漏、关系型抓
+#   真值 A 侧自由、odom B 侧自由（**不落墙**）、‖o-x‖≤ξ，唯位移段穿薄墙(d=0.20<ξ)。
+#   见 docs/ScenB-Irreducibility.md。验「不可约性已接入常驻 audit_suite」。
+# ====================================================================
+def scenario_b2():
+    # 取一段健康 env 行程作**干净能量账本**（物理层 EC1-EC5 绿）；几何为合成（点估计 radius=0）。
+    env = EmbodiedNavEnv(slip=0.05, control_mode="A", map_type="maze")
+    env.reset(seed=7)
+    env.pos = np.array([20.0, 20.0]); env.theta = 0.0; env.v_act = 0.0; env.w_act = 0.0
+    env.odom_pos = env.pos.copy(); env.odom_theta = 0.0
+    rng = np.random.default_rng(7)
+    eledger = []
+    for _ in range(60):
+        env.step(np.array([0.8, (rng.random() - 0.5) * 0.6], dtype=np.float32))
+        eledger.append(_energy_row(env))
+    n = len(eledger) + 1
+    y = 10.0 + 3.0 * np.arange(n) / (n - 1)
+    truth = np.column_stack([np.full(n, 29.90), y]) + np.random.default_rng(2).normal(0, 0.02, (n, 2))  # A 侧自由(诚实)
+    odom = np.column_stack([np.full(n, 30.35), y]) + np.random.default_rng(3).normal(0, 0.03, (n, 2))   # B 侧自由(不落墙)
+    return truth, odom, eledger
+
+
 def main():
     print("Phase4b · 双态耦合压测（含物理层 EC5' + 常驻联合层）—— 判据分离收尾")
     ta, oa, la_led = scenario_a()
@@ -113,15 +137,40 @@ def main():
         print("  ► 如实判定：**真耦合**。物理层(含 EC5')🟢 + 契约层 🟢 + **EC5' 绿（真值合法、未替 joint 充数）**，")
         print("    唯 joint(report×physics) 红 → 唯联合可抓。坐实「场景B=真耦合、唯 joint 抓」。")
 
-    print(f"\n{'='*78}\n  结论（判据分离、各司其职）\n{'='*78}")
-    print(f"  场景A: {rA['verdict']}  EC5'={'🔴' if not rA['ec5_prime_ok'] else '🟢'} joint={'🔴' if not rA['joint_ok'] else '🟢'}"
-          f"  → 物理层 EC5' 单层抓（非耦合）")
-    print(f"  场景B: {rB['verdict']}  EC5'={'🟢' if rB['ec5_prime_ok'] else '🔴'} joint={'🔴' if not rB['joint_ok'] else '🟢'}"
-          f"  → 唯 joint 抓（真耦合，EC5' 未充数）")
-    clean = a_ok and b_ok
-    print(f"\n  判据分离干净：{'✅ 场景A=EC5'+chr(39)+'单层抓、场景B=唯joint抓' if clean else '⚠️ 见上分析'}")
+    # —— 场景 B2：位移跨墙真耦合（拓扑不可约）—— 验「不可约性已接入常驻 audit_suite」——
+    #   CI(slip-噪声 MI 通道)对此合成几何构造不适用 → run_ci=False；契约层取 C1/C2/C3。
+    tb2, ob2, lb2 = scenario_b2()
+    res2 = run_suite(tb2, ob2, lb2, THIN_WALL, 0.0, 0.05,
+                     EmbodiedNavEnv.V_PHYS_MAX, EmbodiedNavEnv.W_PHYS_MAX, run_ci=False)
+    v2 = coupling_label(res2)
+    jp2 = res2["joint"]["check"]["ok"]; jr2 = res2["joint"]["relational"]["ok"]
+    print(f"\n{'='*78}\n  场景 B2 · 位移跨墙真耦合（拓扑不可约，d=0.20<ξ）—— 不可约性接入常驻套件回归\n{'='*78}")
+    print(format_suite(res2))
+    print(f"  ── 耦合判定 ──────► {v2}")
+    b2_ok = (v2 == "TRUE_COUPLING" and res2["physics"]["ok"] and res2["contract"]["ok"]
+             and res2["physics"]["ec5_prime_ok"] and jp2 and (not jr2))
+    if b2_ok:
+        print("  ► 接入坐实：物理🟢+契约🟢+EC5'🟢+**朴素点查🟢(漏 o_t 在自由空间)**，唯**关系型🔴抓** → TRUE_COUPLING。")
+        print("    常驻 audit_suite 现已覆盖『位移跨墙』拓扑不可约自欺（带地图朴素点查漏、关系型补）。")
+    else:
+        print(f"  ► ⚠️ 接入异常（如实报告）：verdict={v2} 朴素点查ok={jp2} 关系型ok={jr2}")
 
-    json.dump({"scenario_A": rA, "scenario_B": rB, "criteria_separated": bool(clean)},
+    print(f"\n{'='*78}\n  结论（判据分离、各司其职 + 不可约接入）\n{'='*78}")
+    print(f"  场景A : {rA['verdict']}  EC5'={'🔴' if not rA['ec5_prime_ok'] else '🟢'} joint={'🔴' if not rA['joint_ok'] else '🟢'}"
+          f"  → 物理层 EC5' 单层抓（非耦合）")
+    print(f"  场景B : {rB['verdict']}  EC5'={'🟢' if rB['ec5_prime_ok'] else '🔴'} joint={'🔴' if not rB['joint_ok'] else '🟢'}"
+          f"  → joint 朴素点查抓（o_t 落墙·可约形式）")
+    print(f"  场景B2: {v2}  EC5'={'🟢' if res2['physics']['ec5_prime_ok'] else '🔴'} "
+          f"朴素点查={'🟢漏' if jp2 else '🔴'} 关系型={'🔴抓' if not jr2 else '🟢'}"
+          f"  → 唯关系型抓（位移跨墙·拓扑不可约）")
+    clean = a_ok and b_ok and b2_ok
+    print(f"\n  判据分离干净 + 不可约接入：{'✅ A=EC5'+chr(39)+'单层 / B=joint点查 / B2=唯关系型' if clean else '⚠️ 见上分析'}")
+
+    json.dump({"scenario_A": rA, "scenario_B": rB,
+               "scenario_B2": {"verdict": v2, "naive_point_ok": bool(jp2), "relational_ok": bool(jr2),
+                               "physics_ok": bool(res2["physics"]["ok"]), "contract_ok": bool(res2["contract"]["ok"]),
+                               "ec5_prime_ok": bool(res2["physics"]["ec5_prime_ok"]), "irreducible_integrated": bool(b2_ok)},
+               "criteria_separated": bool(clean)},
               open(os.path.join(HERE, "coupling_summary.json"), "w"), indent=2, ensure_ascii=False)
     return clean
 

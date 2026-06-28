@@ -161,7 +161,17 @@
 
 ---
 
-## 8. 范围外（INV-C）
-- 关系型预言接入常驻 `audit_suite`/inference_server 运行时流（本实验为独立验证 harness）；未做。
+## 8. 接入常驻套件 + 回归（已完成）
+- **关系型预言已接入常驻 `audit_suite.run_suite`**：联合层现为**两路互补**——① 朴素点查 `joint_report_vs_map`（抓 o_t 落墙·可约）
+  + ② 关系型 `relational_oracle`（through-cross + 持续性门控 `JOINT_PERSIST_FRAC=0.5`，抓位移跨墙·不可约）；
+  联合层红 ⟺ 任一路红。`coupling_label` 据合并 joint_ok 判定（逻辑不变）。
+- **回归（`run_coupling_test.py`，全绿）**：
+  - 场景 A（真值真穿墙）→ `PHYSICS_INTERNAL`（EC5' 单层抓）——**不变**。
+  - 场景 B（旧式 o_t 落墙）→ `TRUE_COUPLING`（朴素点查抓）——**不变**。
+  - **场景 B2（新增·位移跨墙）→ `TRUE_COUPLING`：物理🟢+契约🟢+EC5'🟢+朴素点查🟢(漏)，唯关系型🔴抓**
+    → 坐实「拓扑不可约自欺已被常驻套件覆盖」。契约 action1 三门、其余审计无回归；master `7b54625` 冻结、.pth 零改动。
+
+## 9. 范围外（INV-C）
+- 关系型预言接入 inference_server **运行时流**（本次已接入离线常驻套件 `audit_suite`，运行时联合监控未做）。
 - 持续性门控阈的形式化（漂移预算/连通区一致性的统计判据）；本实验取固定 persist=0.5 演示分离，未做形式化最优。
 - 多墙/非凸地图的连通区不可约推广；本实验为单薄墙最小见证。

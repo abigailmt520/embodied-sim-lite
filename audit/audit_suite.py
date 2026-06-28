@@ -7,7 +7,8 @@ audit_suite.py  ——  常驻三层审计套件（契约 / 物理 / 联合）
   契约层 (report 自洽)         : C1 真分叉 / C2 帧序单调 / C3 断流即冻结 / CI 互信息泄漏
   物理层 (physics 自洽)        : EC1 能量预算 / EC2 无凭空能量 / EC3 执行器上限 /
                                  EC4 碰撞非负 / EC5 非穿透(账本) / **EC5' 真值-vs-地图(物理内几何重算)**
-  联合层 (report×physics 跨态) : JOINT odom-vs-声称地图（上报轨迹对照物理地图）
+  联合层 (report×physics 跨态) : ① JOINT odom-vs-声称地图（朴素点查·可约）
+                                 ② RELATIONAL seg(truth,odom) 穿墙·端点皆自由（**拓扑不可约**）
 
 层职责分离（Phase4 + 本次 EC5' 收尾）：
   - EC5'（物理内）抓「真值真穿墙」——含碰撞检测剔除墙（幽灵墙）使账本 penetration=0 的 EC5 缺口。
@@ -21,6 +22,11 @@ from energy_audit import audit_session as _energy_audit
 from integrity_audit import (check_truth_odom_fork, check_seq_integrity, check_feed_liveness)
 from leakage_audit import ci_audit
 from joint_audit import ec5_prime, joint_report_vs_map
+from relational_oracle import relational_oracle
+
+# 关系型 through-cross 持续性门控阈：经 docs/ScenB-Irreducibility.md (e) + G5 Part D 验证，
+# gated 短窗内健康 0 误报（δ≪clearance），故并入常驻套件不引入误报。
+JOINT_PERSIST_FRAC = 0.5
 
 
 def _c1c2c3_session(truth, odom):
@@ -54,15 +60,20 @@ def run_suite(truth_traj, odom_traj, ledger, walls, radius, slip,
     physics_checks = ec15["checks"] + [ec5p]
     physics_ok = ec15["passed"] and ec5p["ok"]
 
-    # —— 联合层：odom-vs-声称地图 ——
-    joint = joint_report_vs_map(odom, walls, radius)
-    joint_ok = joint["ok"]
+    # —— 联合层（report×physics 跨态·两路互补）——
+    #   ① 朴素点查 joint_report_vs_map：抓「odom 落墙里」——可约（带地图契约亦可抓）。
+    #   ② 关系型 relational_oracle（through-cross + 持续性门控）：抓「真值/上报落不同自由连通区、
+    #      位移段穿墙」——**拓扑不可约**（端点皆自由、带地图契约也漏；见 docs/ScenB-Irreducibility.md）。
+    #   联合层红 ⟺ 任一路红（互补覆盖：旧式 o_t落墙 + 新式位移跨墙）。
+    joint_point = joint_report_vs_map(odom, walls, radius)
+    joint_rel = relational_oracle(truth, odom, walls, radius, persist_frac=JOINT_PERSIST_FRAC)
+    joint_ok = joint_point["ok"] and joint_rel["ok"]
 
     return {
         "contract": {"ok": contract_ok, "checks": contract_checks},
         "physics": {"ok": physics_ok, "checks": physics_checks,
                     "ec5_prime_ok": ec5p["ok"], "ec5_prime": ec5p},
-        "joint": {"ok": joint_ok, "check": joint},
+        "joint": {"ok": joint_ok, "check": joint_point, "relational": joint_rel},
     }
 
 
@@ -78,9 +89,14 @@ def format_suite(res, title=""):
         mk = '🟢' if c['ok'] else '🔴'
         lines.append(f"      [{mk}] {c['check']}"
                      + ("" if c["ok"] else f"  └ {c['detail']}"))
-    j = res["joint"]["check"]
-    lines.append(layer("联合层 JOINT odom-vs-map", res["joint"]["ok"])
-                 + ("" if res["joint"]["ok"] else f"  └ {j['detail']}"))
+    lines.append(layer("联合层 JOINT(report×physics)", res["joint"]["ok"]))
+    jp = res["joint"]["check"]
+    lines.append(f"      [{'🟢' if jp['ok'] else '🔴'}] {jp['check']}（朴素点查·可约）"
+                 + ("" if jp["ok"] else f"  └ {jp['detail']}"))
+    jr = res["joint"].get("relational")
+    if jr is not None:
+        lines.append(f"      [{'🟢' if jr['ok'] else '🔴'}] {jr['check']}（关系型·拓扑不可约）"
+                     + ("" if jr["ok"] else f"  └ {jr['detail']}"))
     return "\n".join(lines)
 
 

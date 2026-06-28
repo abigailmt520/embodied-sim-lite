@@ -40,7 +40,7 @@
 | **物理保真度** | 简化动力学（质量/惯量/黏性阻尼）+ **F4 矩形碰撞**（圆-AABB 穿透推出+回弹 e=0.5）；能量+碰撞账本精确电报（清洁残差 ~1e-16 J）。**未含**刚体接触动力学 |
 | **契约层审计** | C1 真分叉 / C2 帧序单调 / C3 断流即冻结（**未改、回归通过**）；**+ CI 互信息泄漏审计**（I(Δodom;Δtruth)≤噪声预算界，C1 原理化泛化，可估区 slip≈0.3 抓 L-1/L-2/L-3） |
 | **物理层审计** | EC1 能量预算 / EC2 无凭空能量 / EC3 执行器上限 / EC4 碰撞非负 / EC5 非穿透(账本) / **EC5' 真值-vs-地图(物理内几何重算，不信任账本)**。注入器 P-1..P-5 + CF-1..CF-3（EC5' 零误报，仅真值真穿墙时红）|
-| **联合审计（report×physics 常驻）** | `audit_suite` + `joint_audit`：JOINT odom-vs-声称地图。**判据分离**：EC5' 红⇒物理内单层可抓(非耦合)；EC5' 绿 ∧ JOINT 红⇒真耦合（唯联合可抓）。三层常驻套件 `run_suite`（Phase4/4b）。**🔴 G5 边界**：朴素 JOINT 有**轨迹长度有效包络**——短程(≤40步, odom 漂移<0.15m)零误报且唯抓真耦合(场景B)，长程(≥160步, 累积漂移>1m)健康 odom 漂入墙→100%误报；部署须短滑窗/漂移预算门控。**🔴 拓扑不可约**：场景B重配为「位移跨墙」(端点皆自由、d<ξ)后，带地图契约(o∈M?/o轨迹自穿)也**漏**，唯关系型 seg(x_t,o_t)穿墙可抓 → 关系型层非冗余（`relational_oracle.py`，§ScenB-Irreducibility）|
+| **联合审计（report×physics 常驻）** | `audit_suite` + `joint_audit`：**联合层两路互补**——① JOINT odom-vs-声称地图（朴素点查·可约）+ ② RELATIONAL `relational_oracle` seg(truth,odom) 穿墙·端点皆自由（through-cross+持续性门控 `JOINT_PERSIST_FRAC=0.5`，**拓扑不可约**）；联合红⟺任一路红。**判据分离**：EC5' 红⇒物理内单层可抓(非耦合)；EC5' 绿 ∧ JOINT 红⇒真耦合（唯联合可抓）。三层常驻套件 `run_suite`（Phase4/4b + 不可约接入）。**🔴 G5 边界**：朴素 JOINT 有**轨迹长度有效包络**——短程(≤40步, odom 漂移<0.15m)零误报且唯抓真耦合(场景B)，长程(≥160步, 累积漂移>1m)健康 odom 漂入墙→100%误报；部署须短滑窗/漂移预算门控。**🔴 拓扑不可约**：场景B重配为「位移跨墙」(端点皆自由、d<ξ)后，带地图契约(o∈M?/o轨迹自穿)也**漏**，唯关系型 seg(x_t,o_t)穿墙可抓 → 关系型层非冗余（`relational_oracle.py`，§ScenB-Irreducibility）|
 | **里程计** | 真分叉 odom（吃实际速度 v_act + 打滑漂移），C1 保留；碰撞不修正 odom（守"只漂移不校正"） |
 | **地图** | `random_circle` 10×10 随机圆（默认，零回归）/ `maze` **40×40 手工墙体迷宫**（19 AABB，射线-AABB 雷达 + 圆-矩形碰撞）。**未含**动态障碍 |
 | **碰撞语义** | `terminate`（撞即终止，论文版）/ `bounce`（穿透推出+回弹+每步接触惩罚 R_CONTACT、不终止，迷宫导航用） |
@@ -155,7 +155,8 @@
 - **🔴 诚实代价（d<ξ 双刃）**：同一 d<ξ 让诚实噪声在薄墙附近偶发跨墙——M6a/M6b 健康误报 30/30、关系型单帧 25/30；但**持续性门控**(穿墙帧占比：健康 max=0.38 < 阈0.5 < v2=1.00)后**关系型健康 0/30、v2 仍抓** → 唯关系型能同时对 v2 敏感、对健康特异（与 G5 Part D 同源）。
 - **(e) 经验 soundness（§5 命门之二）**：实测真实 env 诚实漂移 δ(t) vs 障碍 clearance vs C1 ceiling ξ=0.50。**可证 sound 充分条件 δ_max<clear_min**：gated 短窗(含 scenB v2 N=60)[20,40,80] 实测 δ_max/clear_med=0.10/0.18/0.41 → **δ≪clearance、可证不误报**。δ_max 随窗长增长(0.08→0.13→0.27→1.10→5.39m)、**越过 clear_min @L≈160 恰对齐 G5 朴素点查 FP 包络**(0/30@≤80→29/30@160→30/30@320) → FP 包络由「δ越过clearance」几何解释。🔵 **精化关系型(through-cross+持续性)FP 全程 0/30**(优于朴素点查)。→ **「不可约」+「经验 sound」两主张均数据坐实、无需修正**。
 - **产物**：`audit/relational_oracle.py`(五路预言+clearance)、`audit/run_scenB_irreducibility.py`、`audit/scenB_irreducibility.{json,png}`(3面板)。无回归（env 未改）。
-- 详情：[docs/ScenB-Irreducibility.md](docs/ScenB-Irreducibility.md)。
+- **接入常驻套件 + 回归**：关系型预言并入 `audit_suite.run_suite` 联合层（两路互补：朴素点查+关系型，`JOINT_PERSIST_FRAC=0.5`）；`run_coupling_test.py` 增**场景 B2（位移跨墙）**回归——物理🟢+契约🟢+EC5'🟢+朴素点查🟢(漏)，唯**关系型🔴抓**→ `TRUE_COUPLING`，坐实不可约自欺已被常驻套件覆盖。场景 A/B 判定不变、契约 action1 三门、无回归；master `7b54625` 冻结、.pth 零改动。
+- 详情：[docs/ScenB-Irreducibility.md](docs/ScenB-Irreducibility.md)（§8 接入+回归）。
 
 ---
 
