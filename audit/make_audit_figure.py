@@ -45,9 +45,10 @@ GREEN_FILL, GREEN_EDGE, GREEN_TXT = "#d7f3e3", "#2faa6a", "#11623b"
 RED_FILL, RED_EDGE, RED_TXT = "#fbd9d9", "#d84141", "#8a1c1c"
 HEAD_FILL, HEAD_TXT = "#2b2f3a", "#ffffff"
 
-ROWS = [("C1", "C1 · TRUTH_ODOM_FORK\nTruth↔Odom 真分叉"),
-        ("C2", "C2 · SEQ_INTEGRITY\n帧序号单调自洽"),
-        ("C3", "C3 · FEED_LIVENESS\n断流即冻结/OFFLINE")]
+# 行名与论文 v1.1 图 2 逐字一致(论文 v1.1 术语);内部 CHECK_ID 标识符保持不变
+ROWS = [("C1", "C1 真值-里程计真分叉\nTRUTH_ODOM_FORK"),
+        ("C2", "C2 帧序号单调\nSEQ_INTEGRITY"),
+        ("C3", "C3 断流冻结\nFEED_LIVENESS")]
 
 COLS = [("healthy", "健康系统 (门2)\nHealthy"),
         ("1-A_truth_copy", "注入 1-A\nodom ← truth"),

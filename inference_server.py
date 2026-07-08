@@ -316,6 +316,8 @@ HTML_CONTENT = """
                      background:rgba(0,0,0,0.8);">
                     <div style="font-size:1.6em; font-weight:bold;">⚠ OFFLINE</div>
                     <div style="margin-top:8px; color:#ffaaaa;">真理源链路中断 · 画面已冻结</div>
+                    <!-- 检查点名称为论文 v1.1 术语(与论文图 2 行名一致) -->
+                    <div style="margin-top:6px; font-size:0.85em; color:#ffbbbb;">完整性检查点：C3 断流冻结 / FEED_LIVENESS</div>
                     <div style="margin-top:4px; font-size:0.8em; color:#cc8888;">前端不做本地推演（dead-reckoning），等待后端重连…</div>
                 </div>
             </div>

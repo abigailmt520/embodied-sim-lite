@@ -30,6 +30,13 @@ session 帧记录契约（list[dict]）：
 import math
 
 # ---- 判定阈值（保守、物理可解释；非为凑结果而调，见 INV-2）----
+# ---- 显示层名称(论文 v1.1 术语,与论文图 2 行名逐字一致)----
+# 注意:内部 check 标识符(C1_TRUTH_ODOM_FORK 等)保持不变以兼容既有 session/脚本,
+# 此处仅统一"显示层"文案为中英双语格式。
+DESC_C1 = "C1 真值-里程计真分叉 / TRUTH_ODOM_FORK"
+DESC_C2 = "C2 帧序号单调 / SEQ_INTEGRITY"
+DESC_C3 = "C3 断流冻结 / FEED_LIVENESS"
+
 EPS_FORK = 1e-4        # Truth–Odom 视为"无分叉"的误差上限 (m)：健康系统打滑后远超此值
 MIN_MOTION = 0.5       # C1 生效所需的最小真值累计行程 (m)：行程不足则判 N/A 而非误报
 EPS_MOVE = 1e-9        # 判定"位姿发生移动"的最小欧氏增量 (m)
@@ -73,7 +80,7 @@ def check_truth_odom_fork(session):
     """
     online = [f for f in session if f.get("link_status", "online") == "online"]
     if len(online) < 2:
-        return _result("C1_TRUTH_ODOM_FORK", "Truth 与 Odom 是否真分叉",
+        return _result("C1_TRUTH_ODOM_FORK", DESC_C1,
                        True, "online 帧不足，N/A")
 
     L = 0.0
@@ -86,18 +93,18 @@ def check_truth_odom_fork(session):
             e_max, e_max_seq = e, f["seq"]
 
     if L < MIN_MOTION:
-        return _result("C1_TRUTH_ODOM_FORK", "Truth 与 Odom 是否真分叉",
+        return _result("C1_TRUTH_ODOM_FORK", DESC_C1,
                        True, f"真值累计行程 L={L:.3f}m < {MIN_MOTION}m，运动不足，N/A")
 
     if e_max < EPS_FORK:
         return _result(
-            "C1_TRUTH_ODOM_FORK", "Truth 与 Odom 是否真分叉", False,
+            "C1_TRUTH_ODOM_FORK", DESC_C1, False,
             f"行程 L={L:.2f}m 内 Truth–Odom 最大误差仅 {e_max:.2e}m (<{EPS_FORK:.0e}) —— "
             f"里程计无漂移/疑似抄真值（假仪表）",
             locator={"max_err_m": e_max, "truth_path_len_m": round(L, 3),
                      "n_online_frames": len(online)})
     return _result(
-        "C1_TRUTH_ODOM_FORK", "Truth 与 Odom 是否真分叉", True,
+        "C1_TRUTH_ODOM_FORK", DESC_C1, True,
         f"行程 L={L:.2f}m 内 Truth–Odom 最大误差 {e_max:.3f}m @seq={e_max_seq}（真分叉）",
         locator={"max_err_m": round(e_max, 4), "truth_path_len_m": round(L, 3)})
 
@@ -121,18 +128,18 @@ def check_seq_integrity(session):
         if prev is not None:
             ps, cs = prev["seq"], f["seq"]
             if cs < ps:
-                return _result("C2_SEQ_INTEGRITY", "帧序号是否单调自洽", False,
+                return _result("C2_SEQ_INTEGRITY", DESC_C2, False,
                                f"帧序号倒退：seq {ps} → {cs}",
                                locator={"frame_index": i, "prev_seq": ps, "seq": cs,
                                         "recv_t": f["recv_t"]})
             if _moved(prev, f) and cs == ps:
-                return _result("C2_SEQ_INTEGRITY", "帧序号是否单调自洽", False,
+                return _result("C2_SEQ_INTEGRITY", DESC_C2, False,
                                f"数据在更新（真值移动 {_dist(prev['truth'], f['truth']):.3f}m）"
                                f"但帧序号冻结于 seq={cs}",
                                locator={"frame_index": i, "frozen_seq": cs,
                                         "recv_t": f["recv_t"]})
         prev = f
-    return _result("C2_SEQ_INTEGRITY", "帧序号是否单调自洽", True,
+    return _result("C2_SEQ_INTEGRITY", DESC_C2, True,
                    "所有 online 帧的帧序号随数据更新单调自增")
 
 
@@ -160,7 +167,7 @@ def check_feed_liveness(session):
                 stale_run += 1
                 if stale_run >= STALE_TOL:
                     return _result(
-                        "C3_FEED_LIVENESS", "断流是否即冻结并标 OFFLINE", False,
+                        "C3_FEED_LIVENESS", DESC_C3, False,
                         f"feed 已停更（自 seq={f['seq']} 起连续 {stale_run} 帧数据冻结、"
                         f"墙钟仍在推进）但链路仍声明 online —— 断流却显示运行中",
                         locator={"stale_from_frame": run_start, "frozen_seq": f["seq"],
@@ -171,7 +178,7 @@ def check_feed_liveness(session):
         else:
             stale_run = 0
         prev = f
-    return _result("C3_FEED_LIVENESS", "断流是否即冻结并标 OFFLINE", True,
+    return _result("C3_FEED_LIVENESS", DESC_C3, True,
                    "无'断流却显示运行中'：陈旧帧均已正确标记 OFFLINE 冻结")
 
 
@@ -190,10 +197,10 @@ def format_report(audit, title=""):
     lines = []
     if title:
         lines.append(title)
-    overall = "🟢 全绿通过 (GREEN)" if audit["passed"] else "🔴 检出自欺 (RED)"
+    overall = "🟢 ✓ 全绿通过 (GREEN)" if audit["passed"] else "🔴 ✗ 检出自欺 (RED)"
     lines.append(f"  审计总判定：{overall}")
     for r in audit["checks"]:
-        mark = "🟢 GREEN" if r["ok"] else "🔴 RED  "
+        mark = "✓ GREEN" if r["ok"] else "✗ RED  "  # ✓/✗ 保证黑白印刷与色弱可辨
         lines.append(f"    [{mark}] {r['check']:<22} {r['desc']}")
         lines.append(f"             └─ {r['detail']}")
         if not r["ok"] and r["locator"]:

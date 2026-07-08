@@ -37,9 +37,9 @@ Embodied-SimLite 是一个轻量化的具身智能（自主导航/避障）数�
 
 | 检查 | 抓什么自欺 |
 |---|---|
-| **C1 真分叉** | 里程计被接回真值（误差链路死掉，`Truth≡Odom`） |
-| **C2 帧序单调** | 数据在更新、帧序号却冻结/倒退（帧序号撒谎） |
-| **C3 断流即冻结** | 断流却仍声明 online / 显示"运行中" |
+| **C1 真值-里程计真分叉 / TRUTH_ODOM_FORK** | 里程计被接回真值（误差链路死掉，`Truth≡Odom`） |
+| **C2 帧序号单调 / SEQ_INTEGRITY** | 数据在更新、帧序号却冻结/倒退（帧序号撒谎） |
+| **C3 断流冻结 / FEED_LIVENESS** | 断流却仍声明 online / 显示"运行中" |
 
 通过 `audit/fault_injection.py` 向健康系统**真实注入**三类假仪表，审计逐一**判红并定位**（帧号/seq/误差/recv_t）；健康系统则**全绿不误报**。下图为"红/绿对照"证据：第一列健康全绿，后三列每类注入被对应检查判红。
 
@@ -125,7 +125,7 @@ embodied-sim-lite/
 ├── Architecture.md          # 架构说明文档
 ├── requirements.txt
 ├── audit/                   # 防自欺完整性审计 + 评测
-│   ├── integrity_audit.py   #   审计仪：C1 真分叉 / C2 帧序单调 / C3 断流即冻结
+│   ├── integrity_audit.py   #   审计仪：C1 真值-里程计真分叉 / C2 帧序号单调 / C3 断流冻结（论文 v1.1 术语）
 │   ├── fault_injection.py   #   假仪表注入器（自证抓假，仅测试用）
 │   ├── run_action1.py       #   三门一键实跑：抓假(红) + 健康(绿) + PPO 评测
 │   ├── make_audit_figure.py #   红/绿对照矩阵图
