@@ -1,0 +1,26 @@
+cff-version: 1.2.0
+message: "如果您在研究或教学中使用本平台,请引用以下论文与本仓库。"
+title: "Embodied-SimLite: 轻量化具身智能数字孪生验证平台"
+type: software
+authors:
+  - family-names: "Feng"
+    given-names: "Yue"
+    affiliation: "School of Information and Software Engineering, University of Electronic Science and Technology of China, Chengdu, China"
+repository-code: "https://gitee.com/yfeng620/embodied-sim-lite"
+license: Apache-2.0
+keywords:
+  - embodied intelligence
+  - system audit literacy
+  - digital twin
+  - Sim-to-Real
+preferred-citation:
+  type: article
+  title: "面向具身智能的系统审计素养培养实践"
+  authors:
+    - family-names: "Feng"
+      given-names: "Yue"
+      affiliation: "School of Information and Software Engineering, University of Electronic Science and Technology of China, Chengdu, China"
+  journal: "计算机教育"
+  year: 2026
+  status: submitted
+  notes: "拟刊发于《计算机教育》,录用后补卷期号。"

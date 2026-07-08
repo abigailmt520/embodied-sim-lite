@@ -153,6 +153,26 @@ embodied-sim-lite/
 
 ---
 
-## 7. 许可证
+## 7. 相关论文
+
+- **论文**:冯月. 面向具身智能的系统审计素养培养实践. 拟刊发于《计算机教育》(v1.1 修改稿已投,录用后补卷期号)。
+- **图表复现**:论文全部统计图表(图 4/图 5/图 7/图 8)可由 [`tools/paper_figures/`](tools/paper_figures/) 一键复现;
+  论文图 2 由 `audit/make_audit_figure.py --paper` 生成,图 3 由 `diagnostics/record_fork.py --paper` 生成,
+  图 4 可通过 `--eval-json audit/eval_summary.json` 挂接平台实测评测结果,形成可复现闭环。
+- **引用格式**:见 [CITATION.cff](CITATION.cff);开源许可为 Apache-2.0(见 [LICENSE](LICENSE))。
+
+### 平台检查点与论文 3.2 节术语对照
+
+| 平台内部标识符 | 论文 3.2 节术语(显示名) | 实现位置 |
+|---|---|---|
+| `C1_TRUTH_ODOM_FORK` | C1 真值-里程计真分叉 / TRUTH_ODOM_FORK | `audit/integrity_audit.py` `check_truth_odom_fork()` |
+| `C2_SEQ_INTEGRITY` | C2 帧序号单调 / SEQ_INTEGRITY | `audit/integrity_audit.py` `check_seq_integrity()` |
+| `C3_FEED_LIVENESS` | C3 断流冻结 / FEED_LIVENESS | `audit/integrity_audit.py` `check_feed_liveness()` |
+
+内部标识符保持不变以兼容既有 session 数据;显示层文案(审计报告、红/绿矩阵图、前端 OFFLINE 遮罩)已统一为论文 v1.1 术语,与论文图 2 行名逐字一致。
+
+---
+
+## 8. 许可证
 
 见 [LICENSE](LICENSE)。
