@@ -95,6 +95,8 @@ python audit/run_action1.py
 #    → 门1：注入 1-A/1-B/1-C 假仪表，审计逐一判红并定位
 #    → 门2：健康系统三项全绿、零误报
 #    → 门3：PPO × 25 回合成功率/碰撞率/到达步数 + 出图 audit/eval_metrics.png
+#    → 同时导出机器可读汇总 audit/eval_summary.json（n_maps/计数/比例/时间戳/策略标识，
+#       供 tools/paper_figures/make_paper_figures.py --eval-json 复现论文图 4）
 
 # ③ 生成"红/绿对照"审计证据图（需先跑过 ②）
 python audit/make_audit_figure.py        # → audit/audit_redgreen_matrix.png

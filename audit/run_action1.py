@@ -14,6 +14,8 @@ run_action1.py  ——  动作1 · 三道门一键实跑 + 证据产出
 """
 
 import csv
+import datetime
+import hashlib
 import json
 import os
 import sys
@@ -223,7 +225,31 @@ def main():
     print(f"  门 1（审计抓假·红）: {'✅ 通过（3/3 注入全部判红并定位）' if gate1_ok else '❌ 未通过'}")
     print(f"  门 2（放行健康·绿）: {'✅ 通过（健康系统全绿）' if gate2_ok else '❌ 未通过（误报）'}")
     print(f"  门 3（基础评测）   : ✅ 已产出真实指标 + 图（成功率 {summary['success_rate']:.0%}）")
-    json.dump(summary, open(os.path.join(HERE, "eval_summary.json"), "w"), indent=2)
+
+    # —— 机器可读评测汇总导出：供 tools/paper_figures/make_paper_figures.py --eval-json
+    #    直接生成论文图 4，与平台评测结果形成可复现闭环 ——
+    counts = {
+        "success": sum(r["success"] for r in rows),
+        "collision": sum(r["collision"] for r in rows),
+        "timeout": sum(1 for r in rows if r["outcome"] == "timeout"),
+    }
+    with open(MODEL_PATH, "rb") as fh:
+        policy_sha = hashlib.sha256(fh.read()).hexdigest()[:12]
+    export = {
+        "schema_version": 1,
+        "generated_at": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
+        "policy": {"file": os.path.basename(MODEL_PATH), "sha256_12": policy_sha},
+        # 每回合一张独立随机地图（种子各异），故 n_maps = 回合数、episodes_per_map = 1
+        "n_maps": N_EVAL_EPISODES,
+        "episodes_per_map": 1,
+        "seed_range": [SEED_EVAL, SEED_EVAL + N_EVAL_EPISODES - 1],
+        "counts": counts,
+        "rates": {k: counts[k] / len(rows) for k in counts},
+        **summary,   # 兼容旧字段：n_episodes / success_rate / ... / avg_steps_all
+    }
+    out_json = os.path.join(HERE, "eval_summary.json")
+    json.dump(export, open(out_json, "w"), indent=2, ensure_ascii=False)
+    print(f"  [OK] 机器可读汇总: {out_json}（可用于 make_paper_figures.py --eval-json）")
 
 
 if __name__ == "__main__":
