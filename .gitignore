@@ -157,6 +157,8 @@ diagnostics/*.diff
 diagnostics/fork_*.csv
 diagnostics/server.log
 *.orig
+# 论文图表复现产物(仓库只存脚本不存产物,见 tools/paper_figures/)
+figs_out/
 # 内部工作笔记（不公开）
 task/
 old/
