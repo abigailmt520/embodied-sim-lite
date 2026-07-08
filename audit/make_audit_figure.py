@@ -98,7 +98,10 @@ def cell_text(row_key, chk):
     return head, body
 
 
-def main():
+def main(paper=False):
+    # 论文截图模式(--paper):字号整体放大约 1.45 倍并以 300dpi 输出,
+    # 保证论文图 2 在期刊单栏(约 8cm)黑白印刷下可读
+    S = 1.45 if paper else 1.0
     audits = {ck: load_audit(ck) for ck, _ in COLS}
 
     nrow, ncol = len(ROWS), len(COLS)
@@ -121,13 +124,13 @@ def main():
         x = x0 + j * cw
         box(x, y0 + nrow * rh, cw, rh * 0.95, HEAD_FILL, HEAD_FILL)
         ax.text(x + cw / 2, y0 + nrow * rh + rh * 0.48, label, ha="center", va="center",
-                color=HEAD_TXT, fontsize=11, fontweight="bold")
+                color=HEAD_TXT, fontsize=11*S, fontweight="bold")
     # 行表头
     for i, (_, label) in enumerate(ROWS):
         y = y0 + (nrow - 1 - i) * rh
         box(0.06, y, 1.05, rh, HEAD_FILL, HEAD_FILL)
         ax.text(0.06 + 1.05 / 2, y + rh / 2, label, ha="center", va="center",
-                color=HEAD_TXT, fontsize=10.5, fontweight="bold")
+                color=HEAD_TXT, fontsize=10.5*S, fontweight="bold")
 
     # 单元格
     for i, (rk, _) in enumerate(ROWS):
@@ -143,19 +146,20 @@ def main():
                 hc, bc = RED_TXT, RED_TXT
             head, body = cell_text(rk, chk)
             ax.text(x + cw / 2, y + rh * 0.74, head, ha="center", va="center",
-                    color=hc, fontsize=12.5, fontweight="bold")
+                    color=hc, fontsize=12.5*S, fontweight="bold")
             ax.text(x + cw / 2, y + rh * 0.34, body, ha="center", va="center",
-                    color=bc, fontsize=8.2)
+                    color=bc, fontsize=8.2*S)
 
     fig.suptitle("Embodied-SimLite · 完整性审计 红/绿对照证据 (Integrity Audit RED/GREEN)",
-                 fontsize=15, fontweight="bold", y=0.985)
+                 fontsize=15*S, fontweight="bold", y=0.985)
     ax.text((ncol + 1.15) / 2, 0.04,
             "门2：健康系统三项全绿、零误报   |   门1：1-A/1-B/1-C 三类注入各被对应检查判红并定位   "
             "——审计自身已被证明「能抓假」，非永远显绿的波将金村",
-            ha="center", va="center", fontsize=9.5, color="#333")
+            ha="center", va="center", fontsize=9.5*S, color="#333")
 
-    out = os.path.join(HERE, "audit_redgreen_matrix.png")
-    fig.savefig(out, dpi=150, bbox_inches="tight")
+    out = os.path.join(HERE, "audit_redgreen_matrix_paper.png" if paper
+                       else "audit_redgreen_matrix.png")
+    fig.savefig(out, dpi=300 if paper else 150, bbox_inches="tight")
     print(f"[OK] 红/绿对照图已保存: {out}")
     # 顺带核验：第一列应全绿，后三列对角线应红
     ok = (all(audits["healthy"][CHECK_ID[r]]["ok"] for r, _ in ROWS)
@@ -166,4 +170,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+    ap = argparse.ArgumentParser(description="完整性审计红/绿对照图(论文图 2)")
+    ap.add_argument("--paper", action="store_true",
+                    help="论文截图模式:大字号 300dpi 输出 audit_redgreen_matrix_paper.png")
+    main(paper=ap.parse_args().paper)

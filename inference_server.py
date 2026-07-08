@@ -276,6 +276,17 @@ HTML_CONTENT = """
             position: absolute; bottom: 20px; right: 20px; color: rgba(255,255,255,0.5);
             font-family: monospace; font-size: 12px; pointer-events: none; z-index: 1000;
         }
+
+        /* ---- 论文截图模式（?screenshot=1）：全局字号 ≥16px、遥测行高加大、
+                隐藏与演示无关的操作提示，供期刊单栏（约 8cm）印刷截图 ---- */
+        body.screenshot-mode { font-size: 16px; }
+        body.screenshot-mode .panel-title { font-size: 1.35em; }
+        body.screenshot-mode .app-brand { font-size: 1.25em; }
+        body.screenshot-mode #telemetry { min-width: 330px; padding: 20px; }
+        body.screenshot-mode .tel-row { font-size: 17px; margin: 11px 0; }
+        body.screenshot-mode #telemetry h3 { font-size: 19px; }
+        body.screenshot-mode #telemetry p { font-size: 16px; }
+        body.screenshot-mode #view-hint { display: none; }
     </style>
 </head>
 <body>
@@ -317,7 +328,7 @@ HTML_CONTENT = """
                     <div style="font-size:1.6em; font-weight:bold;">⚠ OFFLINE</div>
                     <div style="margin-top:8px; color:#ffaaaa;">真理源链路中断 · 画面已冻结</div>
                     <!-- 检查点名称为论文 v1.1 术语(与论文图 2 行名一致) -->
-                    <div style="margin-top:6px; font-size:0.85em; color:#ffbbbb;">完整性检查点：C3 断流冻结 / FEED_LIVENESS</div>
+                    <div id="c3-term" style="margin-top:6px; font-size:0.85em; color:#ffbbbb;">完整性检查点：C3 断流冻结 / FEED_LIVENESS</div>
                     <div style="margin-top:4px; font-size:0.8em; color:#cc8888;">前端不做本地推演（dead-reckoning），等待后端重连…</div>
                 </div>
             </div>
@@ -334,6 +345,14 @@ HTML_CONTENT = """
         window.simData = { x: 0, y: 0, yaw: 0, ox: 0, oy: 0, oyaw: 0, v: 0 };
 
         window.onload = function() {
+            // ---- 论文截图模式（?screenshot=1）：放大字号/行距、隐藏操作提示、
+            //      双语文案取中文部分（论文 v1.1 术语），供论文图 2/图 3 期刊截图 ----
+            const screenshotMode = new URLSearchParams(window.location.search).get('screenshot') === '1';
+            if (screenshotMode) {
+                document.body.classList.add('screenshot-mode');
+                document.getElementById('c3-term').innerText = '完整性检查点：C3 断流冻结';
+            }
+
             // 统一连到推理网关的 /ws（取代旧版 /ws/simulation）
             const wsUrl = `ws://${window.location.host}/ws`;
             const ws = new WebSocket(wsUrl);

@@ -35,6 +35,33 @@ from embodied_env import EmbodiedNavEnv  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SEED = 7
+
+# —— 论文截图模式(--paper)的中文字体:按平台自动探测,找不到只警告(与 tools/paper_figures 一致)——
+CJK_FONT_FILES = [
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    "/System/Library/Fonts/PingFang.ttc",
+    "/System/Library/Fonts/Hiragino Sans GB.ttc",
+    "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+    "C:/Windows/Fonts/msyh.ttc",
+]
+CJK_FONT_NAMES = ["Noto Sans CJK SC", "Source Han Sans SC", "Microsoft YaHei",
+                  "PingFang SC", "Noto Sans CJK JP", "Hiragino Sans GB", "Arial Unicode MS"]
+
+
+def _setup_cjk_font(plt, font_manager):
+    for path in CJK_FONT_FILES:
+        if os.path.exists(path):
+            try:
+                font_manager.fontManager.addfont(path)
+            except Exception:
+                pass
+    available = {f.name for f in font_manager.fontManager.ttflist}
+    chosen = [n for n in CJK_FONT_NAMES if n in available]
+    if not chosen:
+        print("  [WARN] 未找到中文字体,论文模式图中中文可能显示为方框。")
+    plt.rcParams["font.family"] = "sans-serif"
+    plt.rcParams["font.sans-serif"] = chosen + plt.rcParams["font.sans-serif"]
+    plt.rcParams["axes.unicode_minus"] = False
 STEPS = EmbodiedNavEnv.MAX_STEPS          # 一个回合长度 = 500 步
 ACTION = np.array([0.6, 0.25], dtype=np.float32)  # 开环定曲率：真实 v=0.6 m/s, w=0.375 rad/s
 
@@ -81,7 +108,7 @@ def metrics(rows):
     }
 
 
-def main():
+def main(paper=False):
     before = record(slip=0.0)
     after = record(slip=EmbodiedNavEnv.SLIP_FACTOR)
 
@@ -128,6 +155,32 @@ def main():
         fig.tight_layout()
         fig.savefig(out, dpi=130)
         print(f"\n  [OK] 误差曲线已保存: {out}")
+
+        # ---- 论文截图模式(--paper):大字号中文版,供论文图 3(期刊单栏约 8cm 印刷)----
+        #      加粗线宽、放大坐标轴/图例字号,并标注两条要点(论文 v1.1 图 3 题注口径)
+        if paper:
+            _setup_cjk_font(plt, matplotlib.font_manager)
+            figp, axp = plt.subplots(figsize=(8, 5))
+            axp.plot(tb, eb, label="slip = 0(对照)", color="#2c7", lw=3.5)
+            axp.plot(ta, ea, label="slip = 0.05(真打滑)", color="#d33", lw=3.5)
+            axp.set_xlabel("时间 / s", fontsize=17)
+            axp.set_ylabel("累积位置误差 |Truth − Odom| / m", fontsize=17)
+            axp.tick_params(labelsize=14)
+            axp.grid(True, alpha=0.3)
+            axp.legend(loc="center left", fontsize=15)
+            axp.annotate("slip=0 退化为真值(误差恒为 0)",
+                         xy=(ta[len(ta)//2], 0), xytext=(ta[len(ta)//6], max(ea)*0.18),
+                         fontsize=15, color="#1a7a50",
+                         arrowprops=dict(arrowstyle="->", color="#1a7a50", lw=1.8))
+            axp.annotate("slip>0 误差随真实行程增长",
+                         xy=(ta[int(len(ta)*0.8)], ea[int(len(ea)*0.8)]),
+                         xytext=(ta[int(len(ta)*0.3)], max(ea)*0.82),
+                         fontsize=15, color="#a02020",
+                         arrowprops=dict(arrowstyle="->", color="#a02020", lw=1.8))
+            outp = os.path.join(HERE, "fork_error_curve_paper.png")
+            figp.tight_layout()
+            figp.savefig(outp, dpi=300)
+            print(f"  [OK] 论文图 3(大字号中文版)已保存: {outp}")
     except Exception as e:  # matplotlib 缺失时降级为仅 CSV（PRD 允许 PNG 或可绘图 CSV）
         print(f"\n  [WARN] 绘图跳过（{e}）；CSV 已生成，可自行绘图。")
 
@@ -136,4 +189,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+    ap = argparse.ArgumentParser(description="真分叉记录器(before/after 误差曲线)")
+    ap.add_argument("--paper", action="store_true",
+                    help="论文截图模式:额外输出大字号中文版 fork_error_curve_paper.png(论文图 3)")
+    main(paper=ap.parse_args().paper)

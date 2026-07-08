@@ -87,6 +87,8 @@ pip install -r requirements.txt      # numpy / gymnasium / torch / stable-baseli
 python inference_server.py
 #    浏览器打开 http://localhost:8000 ，即见 3D 孪生 + 控制蓝图 + 遥测面板
 #    （绿色为真值本体，红色幻影为里程计，随时间可见其漂移脱离——这就是真分叉）
+#    论文截图模式：打开 http://localhost:8000/?screenshot=1
+#    → 全局字号 ≥16px、遥测面板行距加大、隐藏操作提示、双语标签取中文，供论文插图重截
 
 # ② 跑防自欺审计 + RL 评测（三道门一键实跑）
 python audit/run_action1.py
@@ -96,12 +98,14 @@ python audit/run_action1.py
 
 # ③ 生成"红/绿对照"审计证据图（需先跑过 ②）
 python audit/make_audit_figure.py        # → audit/audit_redgreen_matrix.png
+#    加 --paper：大字号 300dpi 输出 audit_redgreen_matrix_paper.png（论文图 2）
 
 # ④ 截取真实断流 OFFLINE 画面（headless Chrome；需本机装有 Chrome）
 python audit/capture_offline.py          # → audit/offline_screenshot.png
 
 # ⑤ 复现真分叉 before/after 误差曲线
 python diagnostics/record_fork.py        # → diagnostics/fork_error_curve.png
+#    加 --paper：额外输出大字号中文版 fork_error_curve_paper.png（论文图 3）
 
 # ⑥（可选）从零训练 PPO（产出新的 ppo_embodied_agent.pth）
 python train_agent.py
