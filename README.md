@@ -155,6 +155,7 @@ embodied-sim-lite/
 
 ## 7. 相关论文
 
+- **论文**:冯月. 面向具身智能的系统审计素养培养实践. 拟刊发于《计算机教育》(v1_2 修改稿已投,录用后补卷期号)。
 - **图表复现**:论文全部统计图表(图 4/图 5/图 7/图 8,后两幅为 v1_2 更正版)及图 6 实拍合成图
   可由 [`tools/paper_figures/`](tools/paper_figures/) 一键复现;
   论文图 2 由 `audit/make_audit_figure.py --paper` 生成,图 3 由 `diagnostics/record_fork.py --paper` 生成,
