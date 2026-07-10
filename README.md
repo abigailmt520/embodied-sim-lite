@@ -60,7 +60,7 @@ Embodied-SimLite 是一个轻量化的具身智能（自主导航/避障）数�
 ### 2.5 ROS 2 桥接（需 Ubuntu + ROS 2 环境）
 `ros_bridge.py` 做纯协议翻译：把孪生状态翻为 ROS 2 话题 `/odom`（发布**漂移里程计**，与真分叉一致）、`/scan`、`tf`；把 `/cmd_vel` 翻为对推理网关的人工覆盖指令（2 秒窗口内抢占 PPO，实现虚实控制权切换）。
 
-> ⚠️ **ROS 2 桥接需在 Ubuntu + ROS 2（rclpy）环境中运行与验证**；其 `/scan`+`/odom`+`tf` 可作为上层 SLAM/Nav2 的数据源，但本仓库未对 rviz2/Nav2 端到端闭环做自动化验证，请在你的 ROS 2 环境中自行联调。
+> ⚠️ **ROS 2 桥接需在 Ubuntu + ROS 2（rclpy）环境中运行与验证**；其 `/scan`+`/odom`+`tf` 可作为上层 SLAM/Nav2 的数据源，但本仓库未对 rviz2/Nav2 端到端闭环做自动化验证，请在你的 ROS 2 环境中自行联调（推荐验证路径与逐级判据见第 5 节）。
 
 ---
 
@@ -115,11 +115,143 @@ python train_agent.py
 # ⑦（需 ROS 2 环境）启动 ROS 2 桥接节点
 python ros_bridge.py                     # 默认连 ws://127.0.0.1:8000/ws
 #    跨机：SIM_GATEWAY_WS=ws://<网关IP>:8000/ws python ros_bridge.py
+#    端到端闭环（rviz2 / SLAM 建图 / Nav2 导航）的自行验证步骤与判据 → 见第 5 节
 ```
 
 ---
 
-## 5. 目录结构
+## 5. ROS 2 端到端闭环自行验证（SLAM 建图 + Nav2 导航）
+
+> ⚠️ **边界重申**：本仓库的自动化验证只覆盖到 `ros_bridge.py` 本身——在 ROS 2 环境下提供 `/odom`+`/scan`+`tf` 与人工覆盖；**rviz2/Nav2/SLAM 的完整闭环未在本仓库做自动化验证**。本节给出推荐的自行验证路径与逐级判据，供你在自己的 ROS 2 环境中联调。示例以 Ubuntu 22.04 + ROS 2 Humble 为准（Jazzy 同理，差异处已注明）。
+
+### 5.1 验证前：看清桥接契约
+
+| 方向 | 话题 / tf | 消息类型 | 说明 |
+|---|---|---|---|
+| 发布 | `/odom` | `nav_msgs/Odometry` | **漂移里程计**（非真值，与 2.2 真分叉一致）；仅含位姿、twist 恒为 0；frame `odom` → `base_footprint`；随 WS 广播 ≈60 Hz |
+| 发布 | `/scan` | `sensor_msgs/LaserScan` | 24 线 360°，量程 5 m，frame `laser_frame`；**QoS 为 BEST_EFFORT**；按孪生 step 去重发布 |
+| 广播 | tf | — | `odom → base_footprint → base_link`，以及 `base_footprint → laser_frame` |
+| 订阅 | `/cmd_vel` | `geometry_msgs/Twist` | 翻译为推理网关的 2 s 人工覆盖指令，抢占 PPO |
+| 订阅 | `/cmd_vel_nav` | `geometry_msgs/TwistStamped` | 同上（适配 Jazzy 起 Nav2 默认的 TwistStamped 输出） |
+
+本体运动约束（Nav2 参数必须与之匹配，见 5.7）：差速底盘，半径 **0.20 m**；线速度 **v ∈ [0, 1.0] m/s——不能倒退，负值会被网关截断为 0**；角速度 **|w| ≤ 1.5 rad/s**。桥接以墙钟打时间戳，因此**全链路 `use_sim_time` 一律保持 `false`**。
+
+### 5.2 第 0 步：环境准备
+
+```bash
+# ROS 2 侧（Ubuntu，以 Humble 为例；Jazzy 把包名前缀换成 ros-jazzy-）
+sudo apt install ros-humble-slam-toolbox ros-humble-navigation2 \
+                 ros-humble-nav2-bringup ros-humble-teleop-twist-keyboard
+pip install websocket-client
+
+# 终端 A（可与 ROS 2 机器不同机）：启动推理网关（唯一真理源）
+python inference_server.py
+
+# 终端 B（ROS 2 环境）：启动桥接节点
+source /opt/ros/humble/setup.bash
+python ros_bridge.py
+#   跨机：SIM_GATEWAY_WS=ws://<网关IP>:8000/ws python ros_bridge.py
+```
+
+桥接终端打印 `✅ 已成功连接到推理网关！` 即可进入下一关。
+
+### 5.3 第 1 关：话题与 tf 冒烟验证
+
+```bash
+ros2 topic list                          # 应包含 /odom /scan
+ros2 topic hz /odom                      # 期望 ≈60 Hz
+ros2 topic hz /scan                      # 期望稳定高频（按 step 去重后仍应数十 Hz）
+ros2 topic echo /scan --once             # ranges 应为 24 个 ≤5.0 的实测距离
+ros2 run tf2_ros tf2_echo odom base_footprint   # 位姿应随本体运动持续变化
+ros2 run tf2_tools view_frames           # 生成 frames.pdf，核对 tf 树
+```
+
+**通过判据**：tf 树为 `odom → base_footprint → {base_link, laser_frame}`；`/odom` 位姿与浏览器孪生中红色幻影（里程计）一致，而非绿色真值。
+
+### 5.4 第 2 关：人工覆盖（虚实控制权切换）
+
+```bash
+ros2 run teleop_twist_keyboard teleop_twist_keyboard
+```
+
+按 `i`（前进）/`j`/`l`（原地转向），观察浏览器 `http://<网关IP>:8000`：
+
+- 绿色本体应即时响应键盘指令；
+- 遥测面板「控制模式」由青色 **RL 自动** 切为红色 **ROS 2 人工覆盖**；
+- 停止发令 **2 s** 后自动交还 PPO（回落 RL 自动）；
+- 按 `,`（后退）本体不动——负线速度被截断为 0，属设计使然，不是故障。
+
+### 5.5 第 3 关：rviz2 观测
+
+```bash
+rviz2
+```
+
+- Fixed Frame 设为 `odom`；
+- Add → **LaserScan**（topic `/scan`），并把其 **Reliability Policy 改为 Best Effort**（默认 Reliable 与桥接 QoS 不匹配，会一个点也收不到）；
+- Add → **Odometry**（`/odom`）与 **TF**。
+
+**通过判据**：24 个激光点大致勾勒出 10 m × 10 m 场地边界与圆形障碍；teleop 驱动时点云与 odom 箭头同步运动。
+
+> 教学观察点：rviz2 中的位姿来自**漂移里程计**，与浏览器孪生中的绿色真值会随行程分叉（开环 500 步 ATE_RMSE ≈ 0.83 m）——下一关 SLAM 的意义正是把这条漂移在线校正回来。
+
+### 5.6 第 4 关：SLAM 建图（slam_toolbox）
+
+```bash
+ros2 launch slam_toolbox online_async_launch.py use_sim_time:=false
+```
+
+slam_toolbox 默认参数与本桥接完全对齐（`base_frame: base_footprint`、`odom_frame: odom`、`scan_topic: /scan`），无需改动。rviz2 中把 Fixed Frame 切为 `map` 并 Add → Map（`/map`），然后用 teleop 缓速绕场一到两圈（或不发指令，让 PPO 自主漫游），观察占据栅格逐步铺满场地。
+
+**通过判据**：
+
+1. `ros2 topic echo /map --once` 有栅格数据；
+2. tf 树新增 `map → odom`，且 `ros2 run tf2_ros tf2_echo map odom` 的变换**非恒等、随行程持续变化**——这正是 SLAM 对里程计真漂移的在线校正量；若恒为单位变换，说明扫描匹配没有生效，闭环存疑；
+3. 存图成功：`ros2 run nav2_map_server map_saver_cli -f simlite_map`。
+
+> 预期管理：24 线稀疏 LiDAR 的建图质量有限（墙面锯齿、圆障碍轮廓稀疏）属正常现象；可调低 slam_toolbox 的 `minimum_travel_distance` / `minimum_travel_heading` 提高插帧密度。
+
+### 5.7 第 5 关：Nav2 导航闭环
+
+与 slam_toolbox **同时运行**（由 SLAM 在线提供 `map→odom` 与 `/map`，无需 AMCL / map_server）：
+
+```bash
+ros2 launch nav2_bringup navigation_launch.py use_sim_time:=false
+#   建议复制一份 nav2_params.yaml，按下表修改后经 params_file:=<路径> 传入
+```
+
+| 参数 | 建议值 | 原因 |
+|---|---|---|
+| `robot_radius`（global/local costmap） | `0.20` | 与本体半径一致 |
+| 控制器 `max_vel_x` / `max_vel_theta` | `≤1.0` / `≤1.5` | 与 env 上限一致，超出部分会被网关截断 |
+| DWB `min_vel_x`（或 RPP `allow_reversing`） | `0.0`（`false`） | **本体不能倒退**，倒车轨迹必然执行失败 |
+| `robot_base_frame` | `base_footprint`（默认 `base_link` 亦可） | 桥接发布了 `base_footprint→base_link` 恒等变换，二者等价 |
+
+cmd_vel 通道说明：Humble 的 Nav2 全链默认 `Twist`，桥接经 `/cmd_vel` 接收（velocity_smoother 平滑后的输出）；Jazzy 起默认 `TwistStamped`，桥接经 `/cmd_vel_nav` 接收控制器输出。两条订阅通道已覆盖两代契约，通常无需 remap。
+
+rviz2 中用 **Nav2 Goal（2D Goal Pose）** 在已建出的地图空白区下发目标。**闭环判据（全部满足才算打通）**：
+
+1. 桥接终端滚动打印 `🕹️ [人工覆盖下发]`，浏览器孪生控制模式变红 **ROS 2 人工覆盖**，本体开始沿全局路径移动；
+2. 局部代价地图中的圆形障碍由 `/scan` 实时刻画，本体绕障不碰撞；
+3. 到达目标，Nav2 报 `Goal succeeded`；停止发令 2 s 后控制模式自动回落 **RL 自动**（控制权归还 PPO）；
+4. 全程 `map→odom` 校正量随里程计漂移持续更新（第 4 关的教学观察点在导航中持续成立）。
+
+### 5.8 常见问题排查
+
+| 症状 | 常见原因 | 处理 |
+|---|---|---|
+| rviz2 里 `/scan` 一个点也没有 | 订阅端 Reliability=Reliable，与桥接 BEST_EFFORT 不匹配 | 把订阅方 Reliability 改为 Best Effort |
+| 下发目标后本体不动 / 原地抖动 | 控制器输出了负线速度，被网关截断为 0 | 按 5.7 表禁用倒车（`min_vel_x: 0.0` / `allow_reversing: false`） |
+| Nav2 有 `/cmd_vel` 输出但孪生无响应 | 桥接未连上网关，或话题消息类型不匹配 | 核对桥接终端 ✅ 连接与 🕹️ 覆盖日志；`ros2 topic info -v` 核对 Twist/TwistStamped 落在哪条订阅通道 |
+| tf 报 extrapolation / 时间戳错误 | 某节点 `use_sim_time=true`，或跨机时钟不同步 | 全链路 `use_sim_time:=false`；跨机部署先做 NTP 对时 |
+| DWB 轨迹评分异常、走走停停 | 本桥接 `/odom` 只含位姿、twist 恒为 0，而 DWB 参考速度反馈 | 换 Regulated Pure Pursuit 等不依赖速度反馈的控制器 |
+| 地图畸变大、墙面重影 | 24 线稀疏 LiDAR + 里程计真漂移（设计使然）叠加 | 调 slam_toolbox 匹配参数；或以 `EmbodiedNavEnv(slip=0.0)` 关闭漂移做对照（`odom ≡ truth`），分离「漂移」与「稀疏」两个变量 |
+
+> 再次强调：以上是**推荐验证路径**，不是本仓库的自动化测试承诺。能否跑通受 ROS 2 发行版、Nav2 版本与参数细节影响；请如实记录你的联调结果——区分「看起来对」与「被证明对」，这本身就是平台要教的东西。
+
+---
+
+## 6. 目录结构
 
 ```
 embodied-sim-lite/
@@ -144,16 +276,16 @@ embodied-sim-lite/
 
 ---
 
-## 6. 能力边界（如实声明，不夸大）
+## 7. 能力边界（如实声明，不夸大）
 
 - **纯运动学**：物理内核为零惯性运动学积分，未建模动力学/加速率限制。
 - **里程计只"漂移"、不"校正"**：平台提供 Odom 真漂移的可视化与审计，**未实现 EKF/SLAM 等定位校正**。
-- **ROS 2 端到端闭环需自行验证**：`ros_bridge.py` 在 ROS 2 环境下提供 `/odom`+`/scan`+`tf` 与人工覆盖；rviz2/Nav2/SLAM 的完整闭环未在本仓库做自动化验证。
+- **ROS 2 端到端闭环需自行验证**：`ros_bridge.py` 在 ROS 2 环境下提供 `/odom`+`/scan`+`tf` 与人工覆盖；rviz2/Nav2/SLAM 的完整闭环未在本仓库做自动化验证。第 5 节给出推荐的自行验证路径（SLAM 建图 + Nav2 导航）与逐级判据。
 - **评测为基础指标**：N=25 的随机地图基础指标，非性能调优结果，不含新旧基线对比。
 
 ---
 
-## 7. 相关论文
+## 8. 相关论文
 
 - **论文**:冯月. 面向具身智能的系统审计素养培养实践. 拟刊发于《计算机教育》(v1_2 修改稿已投,录用后补卷期号)。
 - **图表复现**:论文全部统计图表(图 4/图 5/图 7/图 8,后两幅为 v1_2 更正版)及图 6 实拍合成图
@@ -174,6 +306,6 @@ embodied-sim-lite/
 
 ---
 
-## 8. 许可证
+## 9. 许可证
 
 见 [LICENSE](LICENSE)。
