@@ -123,6 +123,8 @@ python ros_bridge.py                     # 默认连 ws://127.0.0.1:8000/ws
 ## 5. ROS 2 端到端闭环自行验证（SLAM 建图 + Nav2 导航）
 
 > ⚠️ **边界重申**：本仓库的自动化验证只覆盖到 `ros_bridge.py` 本身——在 ROS 2 环境下提供 `/odom`+`/scan`+`tf` 与人工覆盖；**rviz2/Nav2/SLAM 的完整闭环未在本仓库做自动化验证**。本节给出推荐的自行验证路径与逐级判据，供你在自己的 ROS 2 环境中联调。示例以 Ubuntu 22.04 + ROS 2 Humble 为准（Jazzy 同理，差异处已注明）。
+>
+> 📋 **教学使用**：配套学生实验工作单见 [`docs/ros2_lab_worksheet.md`](docs/ros2_lab_worksheet.md)，含五关任务勾选清单、两个审计观察点、证据截图规范（E1–E8）与实验记录表，可直接打印发放。
 
 ### 5.1 验证前：看清桥接契约
 
@@ -269,9 +271,11 @@ embodied-sim-lite/
 │   ├── make_audit_figure.py #   红/绿对照矩阵图
 │   ├── capture_offline.py   #   headless Chrome 截真实断流 OFFLINE 画面
 │   └── *.png                #   结果图（红绿对照 / 评测 / OFFLINE）
-└── diagnostics/             # 真分叉诊断
-    ├── record_fork.py       #   真分叉记录器（before/after 误差曲线）
-    └── fork_error_curve.png
+├── diagnostics/             # 真分叉诊断
+│   ├── record_fork.py       #   真分叉记录器（before/after 误差曲线）
+│   └── fork_error_curve.png
+└── docs/
+    └── ros2_lab_worksheet.md #  ROS 2 联调与审计·学生实验工作单（配套第 5 节）
 ```
 
 ---
