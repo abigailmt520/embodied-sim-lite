@@ -2,7 +2,7 @@
 
 > 里程碑：**重构并统一 RL 物理内核与虚实控制网关**
 > 第一性原理：**彻底解耦物理推演、AI 决策与孪生渲染**
-> 状态：服务端（推理网关 + 孪生前端 + 数据契约）本地实测通过（见文末「验证结果」）；ROS 2 桥接部分需在 Ubuntu + ROS 2 环境中验证。
+> 状态：服务端（推理网关 + 孪生前端 + 数据契约）本地实测通过（见文末「验证结果」）；ROS 2 桥接部分需在 Ubuntu + ROS 2 环境中验证，端到端闭环（rviz2/SLAM/Nav2）的架构视角见本文档第 7 节，逐步操作与判据见 README 第 5 节。
 > 说明：本文档成稿于 V2 重构期；其后里程计已升级为**真分叉**（注入真打滑漂移，非 `odom≡truth`），并新增**防自欺完整性审计**与全局帧序号 `seq`——以下内容已据此更新，详见仓库 README。
 
 ---
@@ -186,14 +186,14 @@ class OverrideController:
 | `train_agent.py` | 训练外壳（剥离时钟，单核满速） | — |
 | `inference_server.py` | **唯一入口**：60Hz 推理心跳 + `/` 直出前端 + `/ws` 广播/覆盖 | 迁入 HTML、新增 `/` 路由、`OverrideController`、决策权仲裁；废弃 `physics_loop`/`state` |
 | `ros_bridge.py` | ROS 2 协议翻译层 | `on_message` 读 `data["odom"]`(漂移里程计)/`data["lidar"]`；`/cmd_vel` 透传为 `{"cmd_vel":{...}}`；连 `/ws`（需 ROS 2 环境运行） |
-| `Architecture_V2.md` | 本文档 | 新增 |
+| `Architecture.md` | 本文档 | 成稿于 V2 重构期，其后随真分叉/审计/ROS 2 闭环章节持续更新 |
 
 ---
 
 ## 5. 验证结果（服务端本地实测）
 
 > 下列为**服务端**（推理网关 + 前端 + 数据契约 + 覆盖机制）本地实测结果。
-> 涉及真实 ROS 2 话题/rviz2/Nav2 的端到端闭环**需在 Ubuntu + ROS 2 环境中验证**，不在本机覆盖范围。
+> 涉及真实 ROS 2 话题/rviz2/Nav2 的端到端闭环**需在 Ubuntu + ROS 2 环境中验证**，不在本机覆盖范围——闭环架构见第 7 节，推荐验证路径与逐级判据见 README 第 5 节。
 
 启动 `inference_server.py` 实测：
 
@@ -225,4 +225,55 @@ python ros_bridge.py                  # 默认连 ws://127.0.0.1:8000/ws
 # 4) 验证虚实控制权无缝切换
 ros2 topic pub -r 10 /cmd_vel geometry_msgs/msg/Twist '{linear: {x: 0.5}, angular: {z: 0.8}}'
 #    → 网关遥测切「ROS 2 人工覆盖」；停发 2 秒后自动交还「RL 自动」
+
+# 5) 端到端闭环（rviz2 观测 → slam_toolbox 建图 → Nav2 导航）
+#    架构与数据流见本文档第 7 节；逐关操作命令、通过判据与排查表见 README 第 5 节
+#    （五关递进：话题/tf 冒烟 → 人工覆盖 → rviz2 → SLAM 建图 → Nav2 闭环）
 ```
+
+---
+
+## 7. ROS 2 端到端闭环架构（SLAM 建图 + Nav2 导航，自行验证）
+
+> ⚠️ 本节描述闭环的**架构与设计约束**；该闭环未在本仓库做自动化验证，逐步操作命令、通过判据与常见问题排查见 README 第 5 节。
+
+### 7.1 完整闭环数据流
+
+```
+inference_server.py（唯一真理源：60Hz 心跳 + PPO + OverrideController）
+   │  /ws 广播 get_render_state() 嵌套契约
+   ▼
+ros_bridge.py（纯协议翻译，零状态推演）
+   │  发布 /odom（漂移里程计，仅位姿、twist 恒 0）
+   │  发布 /scan（24 线 360°、5 m，QoS=BEST_EFFORT）
+   │  广播 tf：odom → base_footprint → base_link / laser_frame
+   ▼
+slam_toolbox（在线建图）                    Nav2（planner + controller + costmap）
+   │  发布 map→odom 校正 + /map  ─────────▶   │  订阅 /map、/scan、tf
+   │                                          │  输出 /cmd_vel（Humble, Twist）
+   │                                          │  或 /cmd_vel_nav（Jazzy+, TwistStamped）
+   ▼                                          ▼
+ros_bridge.py ── {"cmd_vel":{...}} ──▶ OverrideController（2s 窗口抢占 PPO）──▶ env.step()
+                                                                        闭环回到真理源
+```
+
+### 7.2 架构要点（为什么这样设计）
+
+1. **真理源唯一性在 ROS 层同样成立**：桥接不做任何状态推演，SLAM/Nav2 消费的是与孪生前端**同一份** `/ws` 广播——ROS 层不存在第二条物理链路，「后端是唯一真理源」的铁律延伸到了 ROS 生态。
+2. **`/odom` 发布漂移里程计是刻意为之**：SLAM 的 `map→odom` 校正量因此**非恒等、随行程持续变化**，成为「真分叉」在 ROS 层的可观测证据；若误发真值 `robot`，校正量恒为单位变换，等价于在 ROS 层复活 C1 型假仪表（`odom≡truth`），与平台防自欺立场自相矛盾。
+3. **Nav2 与人工遥控完全同构**：Nav2 的 `/cmd_vel` 与 teleop 走同一条覆盖通道，网关的决策权仲裁对「人工 / Nav2 / RL」三方统一——桥接与网关均无需感知指令来源。
+4. **双订阅通道适配两代 Nav2 契约**：`/cmd_vel`（`Twist`，Humble 全链默认）与 `/cmd_vel_nav`（`TwistStamped`，Jazzy 起默认），消息类型不匹配的通道自然不连接，恰好实现按发行版自动选路，无需 remap。
+
+### 7.3 闭环的硬性契约约束（联调前必读）
+
+| 约束 | 来源 | 对 SLAM/Nav2 的影响 |
+|---|---|---|
+| **v ∈ [0, 1.0] m/s，不能倒退** | 网关 `clip(linear/MAX_LIN_VEL, 0.0, 1.0)` | Nav2 控制器必须禁倒车（DWB `min_vel_x: 0.0` / RPP `allow_reversing: false`），否则倒车轨迹静默失败 |
+| **\|w\| ≤ 1.5 rad/s、半径 0.20 m** | `embodied_env.py` 常量 | 控制器速度上限与 costmap `robot_radius` 须与之一致 |
+| **`/scan` QoS 为 BEST_EFFORT** | 桥接 `sensor_qos` | 订阅端（rviz2 等）Reliability 必须选 Best Effort，Reliable 端点不建立连接 |
+| **`/odom` 仅位姿、twist 恒 0** | 契约无速度字段 | 依赖速度反馈的控制器（DWB 评分）可能异常，建议改用 RPP 等 |
+| **时间戳为墙钟** | 桥接 `get_clock().now()` | 全链路 `use_sim_time` 必须为 `false`；跨机部署需 NTP 对时 |
+
+### 7.4 边界声明
+
+以上闭环由架构保证「接口对齐」，但**跑通与否受 ROS 2 发行版、Nav2 版本与参数细节影响，本仓库不做自动化验证承诺**。请按 README 第 5 节的五关判据逐级验证，如实记录结果——区分「看起来对」与「被证明对」正是平台的教学立场。
