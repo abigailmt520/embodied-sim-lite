@@ -135,7 +135,7 @@ python nav_gateway.py --seed 42          # 替代 ① 作真理源：世界恒�
 
 | 方向 | 话题 / tf | 消息类型 | 说明 |
 |---|---|---|---|
-| 发布 | `/odom` | `nav_msgs/Odometry` | **漂移里程计**（非真值，与 2.2 真分叉一致）；仅含位姿、twist 恒为 0；frame `odom` → `base_footprint`；随 WS 广播 ≈60 Hz |
+| 发布 | `/odom` | `nav_msgs/Odometry` | **漂移里程计**（非真值，与 2.2 真分叉一致）；位姿＋**有限差分 twist**（相邻帧位姿差分，供依赖速度反馈的控制器/平滑器使用）；frame `odom` → `base_footprint`；随 WS 广播（默认网关≈60 Hz / nav_gateway=10 Hz） |
 | 发布 | `/scan` | `sensor_msgs/LaserScan` | 24 线 360°，量程 5 m，frame `laser_frame`；**QoS 为 BEST_EFFORT**；按孪生 step 去重发布 |
 | 广播 | tf | — | `odom → base_footprint → base_link`，以及 `base_footprint → laser_frame` |
 | 订阅 | `/cmd_vel` | `geometry_msgs/Twist` | 翻译为推理网关的 2 s 人工覆盖指令，抢占 PPO |
@@ -238,6 +238,8 @@ ros2 launch nav2_bringup navigation_launch.py use_sim_time:=false
 
 cmd_vel 通道说明：Humble 的 Nav2 全链默认 `Twist`，桥接经 `/cmd_vel` 接收（velocity_smoother 平滑后的输出）；Jazzy 起默认 `TwistStamped`，桥接经 `/cmd_vel_nav` 接收控制器输出。两条订阅通道已覆盖两代契约，通常无需 remap。
 
+> 🔧 **控制器选择实测注记（Jazzy，2026-08）**：默认 MPPI 在本桥接下实测持续低速爬行（~0.01–0.05 m/s，即使 `/odom` twist 可用），长航段必超时；**建议 FollowPath 换 Regulated Pure Pursuit**（不依赖速度反馈，实测 0.8 m/s 满速、终点误差厘米级）。可用 `make_nav2_params_navmode.py` 一键生成含 RPP 的调优参数。
+
 > ⚠️ 默认网关下，回合 reset 会在导航中途重摆障碍——闭环判据可用于观察链路是否打通，但**导航成功率等量化统计务必改用 5.9 静态世界模式**。
 
 rviz2 中用 **Nav2 Goal（2D Goal Pose）** 在已建出的地图空白区下发目标。**闭环判据（全部满足才算打通）**：
@@ -258,6 +260,8 @@ rviz2 中用 **Nav2 Goal（2D Goal Pose）** 在已建出的地图空白区下�
 | DWB 轨迹评分异常、走走停停 | 本桥接 `/odom` 只含位姿、twist 恒为 0，而 DWB 参考速度反馈 | 换 Regulated Pure Pursuit 等不依赖速度反馈的控制器 |
 | 地图畸变大、墙面重影 | 24 线稀疏 LiDAR + 里程计真漂移（设计使然）叠加 | 调 slam_toolbox 匹配参数；或以 `EmbodiedNavEnv(slip=0.0)` 关闭漂移做对照（`odom ≡ truth`），分离「漂移」与「稀疏」两个变量 |
 | 障碍在图上重影成团 / 每次位置都不同 | 默认网关回合制：每回合 reset 重摆障碍（仅场界墙持久） | 改用 5.9 静态世界模式（`nav_gateway.py`，世界恒定） |
+| `ros2 topic hz /odom` 频率越数越高（>10/60Hz 基准且爬升）、TF 抖动、AMCL 粒子云发散 | **多个 ros_bridge 实例并发**（重启时旧实例未死透，双源发布同名话题与 tf） | `pkill -f ros_bridge` 后重起**唯一**实例；长跑前用 hz 校验频率恒定 |
+| 控制器输出恒为毫米级速度、车龟速爬行 | 控制器依赖 `/odom` 速度反馈（旧版桥 twist 恒 0），或 MPPI 与本桥接的组合问题（Jazzy 实测） | 升级桥（twist 有限差分已内置）；仍爬行则换 RPP 控制器（见 5.7 注记） |
 
 > 再次强调：以上是**推荐验证路径**，不是本仓库的自动化测试承诺。能否跑通受 ROS 2 发行版、Nav2 版本与参数细节影响；请如实记录你的联调结果——区分「看起来对」与「被证明对」，这本身就是平台要教的东西。
 
@@ -291,6 +295,11 @@ ros2 launch nav2_bringup bringup_launch.py map:=./map_gt.yaml use_sim_time:=fals
 两种模式对应两类用途：演示/审计教学用默认入口；建图/导航量化实验用本模式。SLAM 课目
 （5.6）也可在本模式下获得干净地图（世界恒定），并与 `make_gt_map.py` 真值图对照评估建图质量。
 
+**配套工具（本模式实验三件套）**：
+- `make_nav2_params_navmode.py`：一键生成调优 Nav2 参数（AMCL 预置位姿/RPP 控制器/禁倒车/收紧目标容差）；
+- `nav_stack_truthloc.sh [map] [params]`：**真值定位**导航栈（map→odom 恒等；24 束稀疏扫描下 AMCL 单腿漂移实测 0.2–0.5 m，量化实验建议用本脚本代替 AMCL 定位）；
+- `traj_logger.py`：10 Hz 轨迹记录到 CSV（实验报告配图/轨迹分析）。
+
 ---
 
 ## 6. 目录结构
@@ -302,6 +311,9 @@ embodied-sim-lite/
 ├── ros_bridge.py            # ROS 2 桥接（需 ROS 2 环境）：孪生状态→/odom·/scan·tf；/cmd_vel→人工覆盖
 ├── nav_gateway.py           # 静态世界导航网关（SLAM/Nav2 实验模式）：seed 固定不 reset、10Hz 实时、无 PPO（见 5.9）
 ├── make_gt_map.py           # 真值出图：由 seed 布局生成 map_gt.pgm/.yaml（map 帧=世界帧，配合 5.9）
+├── make_nav2_params_navmode.py  # 5.9配套：一键生成调优Nav2参数（RPP/预置位姿/禁倒车）
+├── nav_stack_truthloc.sh    # 5.9配套：真值定位导航栈（map→odom恒等，替代AMCL做量化实验）
+├── traj_logger.py           # 5.9配套：10Hz轨迹记录CSV（报告配图/轨迹分析）
 ├── train_agent.py           # PPO 训练脚本（超实时，剥离时钟）
 ├── ppo_embodied_agent.pth   # 配套预训练权重（开箱复现推理/评测）
 ├── Architecture.md          # 架构说明文档

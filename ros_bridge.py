@@ -66,6 +66,7 @@ class EmbodiedRos2Bridge(Node):
         self.tf_broadcaster = TransformBroadcaster(self)
 
         self.robot_base_frame = "base_footprint"
+        self._twist_prev = None   # (t_mono, x, y, yaw) 有限差分算twist用
 
         self.ws = None
         self.log_counter = 0
@@ -147,6 +148,20 @@ class EmbodiedRos2Bridge(Node):
             odom.pose.pose.orientation.y = q[1]
             odom.pose.pose.orientation.z = q[2]
             odom.pose.pose.orientation.w = q[3]
+            # —— twist有限差分（2026-08-22实测定案：twist恒0令MPPI每周期从静止
+            #    重起步，输出被压至~0.014m/s爬行→60s位移0judged假死；差分速度物理诚实）——
+            import time as _time
+            _now_m = _time.monotonic()
+            if self._twist_prev is not None:
+                _pt, _px, _py, _pyaw = self._twist_prev
+                _dt = _now_m - _pt
+                if 0.0 < _dt < 1.0:
+                    _dx, _dy = ox - _px, oy - _py
+                    # 线速度带符号：位移在车头方向的投影（本车无倒车，通常≥0）
+                    odom.twist.twist.linear.x = (_dx * math.cos(oyaw) + _dy * math.sin(oyaw)) / _dt
+                    _dyaw = math.atan2(math.sin(oyaw - _pyaw), math.cos(oyaw - _pyaw))
+                    odom.twist.twist.angular.z = _dyaw / _dt
+            self._twist_prev = (_now_m, ox, oy, oyaw)
             self.odom_pub.publish(odom)
 
             t0 = TransformStamped()

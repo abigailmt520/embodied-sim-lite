@@ -273,7 +273,7 @@ ros_bridge.py ── {"cmd_vel":{...}} ──▶ OverrideController（2s 窗口�
 | **v ∈ [0, 1.0] m/s，不能倒退** | 网关 `clip(linear/MAX_LIN_VEL, 0.0, 1.0)` | Nav2 控制器必须禁倒车（DWB `min_vel_x: 0.0` / RPP `allow_reversing: false`），否则倒车轨迹静默失败 |
 | **\|w\| ≤ 1.5 rad/s、半径 0.20 m** | `embodied_env.py` 常量 | 控制器速度上限与 costmap `robot_radius` 须与之一致 |
 | **`/scan` QoS 为 BEST_EFFORT** | 桥接 `sensor_qos` | 订阅端（rviz2 等）Reliability 必须选 Best Effort，Reliable 端点不建立连接 |
-| **`/odom` 仅位姿、twist 恒 0** | 契约无速度字段 | 依赖速度反馈的控制器（DWB 评分）可能异常，建议改用 RPP 等 |
+| **`/odom` twist=有限差分速度**（旧版恒 0 已修复） | 桥接由相邻帧位姿差分计算 | 速度反馈类消费者可用；控制器仍推荐 RPP（MPPI 与本桥接组合在 Jazzy 实测低速爬行，见 README 5.7/5.8） |
 | **时间戳为墙钟** | 桥接 `get_clock().now()` | 全链路 `use_sim_time` 必须为 `false`；跨机部署需 NTP 对时 |
 | **默认网关回合制 + 6 倍墙钟速** | `inference_server.py` 回合结束自动 reset（重摆障碍）；60Hz 心跳 × `DT=0.1s` | SLAM 图叠影、导航统计不可复现——量化实验改用 `nav_gateway.py`（静态世界、10Hz 实时，README 5.9） |
 
