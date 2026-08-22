@@ -116,6 +116,11 @@ python train_agent.py
 python ros_bridge.py                     # 默认连 ws://127.0.0.1:8000/ws
 #    跨机：SIM_GATEWAY_WS=ws://<网关IP>:8000/ws python ros_bridge.py
 #    端到端闭环（rviz2 / SLAM 建图 / Nav2 导航）的自行验证步骤与判据 → 见第 5 节
+
+# ⑧（需 ROS 2 环境）静态世界导航模式：真值出图 + 导航网关（SLAM/Nav2 实验推荐）
+python make_gt_map.py --seed 42          # 真值占据栅格 map_gt.pgm/.yaml（map 帧=世界帧）
+python nav_gateway.py --seed 42          # 替代 ① 作真理源：世界恒定 / 10Hz 实时 / 无 PPO 自走
+#    动机与完整用法 → 见第 5.9 节；与 ① 勿同时运行（同占 8000 端口）
 ```
 
 ---
@@ -212,6 +217,8 @@ slam_toolbox 默认参数与本桥接完全对齐（`base_frame: base_footprint`
 3. 存图成功：`ros2 run nav2_map_server map_saver_cli -f simlite_map`。
 
 > 预期管理：24 线稀疏 LiDAR 的建图质量有限（墙面锯齿、圆障碍轮廓稀疏）属正常现象；可调低 slam_toolbox 的 `minimum_travel_distance` / `minimum_travel_heading` 提高插帧密度。
+>
+> ⚠️ **默认网关的回合制边界**：`inference_server.py` 在每回合结束（到达/碰撞/500 步截断）时自动 reset——**障碍物随之重摆**，故障碍在 SLAM 图中只会留下多世界叠影，仅场界墙可稳定成图；且其 60Hz 心跳 × `DT=0.1s` 使物理时间以 **6 倍墙钟速**推进。本关用于观察 `map→odom` 校正机制没有问题；**需要干净、可复现的地图请改用 5.9 静态世界导航模式**。
 
 ### 5.7 第 5 关：Nav2 导航闭环
 
@@ -231,6 +238,8 @@ ros2 launch nav2_bringup navigation_launch.py use_sim_time:=false
 
 cmd_vel 通道说明：Humble 的 Nav2 全链默认 `Twist`，桥接经 `/cmd_vel` 接收（velocity_smoother 平滑后的输出）；Jazzy 起默认 `TwistStamped`，桥接经 `/cmd_vel_nav` 接收控制器输出。两条订阅通道已覆盖两代契约，通常无需 remap。
 
+> ⚠️ 默认网关下，回合 reset 会在导航中途重摆障碍——闭环判据可用于观察链路是否打通，但**导航成功率等量化统计务必改用 5.9 静态世界模式**。
+
 rviz2 中用 **Nav2 Goal（2D Goal Pose）** 在已建出的地图空白区下发目标。**闭环判据（全部满足才算打通）**：
 
 1. 桥接终端滚动打印 `🕹️ [人工覆盖下发]`，浏览器孪生控制模式变红 **ROS 2 人工覆盖**，本体开始沿全局路径移动；
@@ -248,8 +257,39 @@ rviz2 中用 **Nav2 Goal（2D Goal Pose）** 在已建出的地图空白区下�
 | tf 报 extrapolation / 时间戳错误 | 某节点 `use_sim_time=true`，或跨机时钟不同步 | 全链路 `use_sim_time:=false`；跨机部署先做 NTP 对时 |
 | DWB 轨迹评分异常、走走停停 | 本桥接 `/odom` 只含位姿、twist 恒为 0，而 DWB 参考速度反馈 | 换 Regulated Pure Pursuit 等不依赖速度反馈的控制器 |
 | 地图畸变大、墙面重影 | 24 线稀疏 LiDAR + 里程计真漂移（设计使然）叠加 | 调 slam_toolbox 匹配参数；或以 `EmbodiedNavEnv(slip=0.0)` 关闭漂移做对照（`odom ≡ truth`），分离「漂移」与「稀疏」两个变量 |
+| 障碍在图上重影成团 / 每次位置都不同 | 默认网关回合制：每回合 reset 重摆障碍（仅场界墙持久） | 改用 5.9 静态世界模式（`nav_gateway.py`，世界恒定） |
 
 > 再次强调：以上是**推荐验证路径**，不是本仓库的自动化测试承诺。能否跑通受 ROS 2 发行版、Nav2 版本与参数细节影响；请如实记录你的联调结果——区分「看起来对」与「被证明对」，这本身就是平台要教的东西。
+
+### 5.9 静态世界导航模式（nav_gateway + 真值地图）——SLAM/Nav2 实验推荐
+
+默认入口 `inference_server.py` 是「回合制 RL 演示」语义，与导航实验存在三项结构性错配：
+①每回合重摆障碍（地图无法稳定成形）②60Hz 心跳 × `DT=0.1s` = 物理时间 6 倍墙钟速（与 Nav2
+墙钟控制错拍）③PPO 常驻自走（与外部控制争抢本体）。需要可复现的建图/导航统计时改用：
+
+```bash
+# ① 真值出图（map 帧 = 世界帧；与网关同 seed = 同一世界）
+python make_gt_map.py --seed 42 --out .
+# ② 静态世界网关（替代 inference_server 作真理源；同占 8000，勿同时跑）
+python nav_gateway.py --seed 42
+# ③ 桥接照旧（契约不变）
+python ros_bridge.py
+# ④ Nav2 带真值图起（AMCL 定位；rviz2 初始位姿 = 出图脚本打印的起点真值）
+ros2 launch nav2_bringup bringup_launch.py map:=./map_gt.yaml use_sim_time:=false
+```
+
+模式差异速览：
+
+| | `inference_server.py`（默认演示） | `nav_gateway.py`（静态导航） |
+|---|---|---|
+| 世界 | 每回合重摆障碍 | seed 固定，永不 reset |
+| 时间 | 60Hz×DT0.1 = 6 倍墙钟速 | 10Hz，sim 时间 == 墙钟 |
+| 控制 | PPO 常驻，覆盖仅 2s 窗口 | 无 PPO；无指令 = 停车 |
+| 里程计 | 真分叉漂移（教学特性） | 默认 `slip=0`（`--slip` 可开对照） |
+| 前端 | Three.js 孪生 | 无（观测面 = rviz2） |
+
+两种模式对应两类用途：演示/审计教学用默认入口；建图/导航量化实验用本模式。SLAM 课目
+（5.6）也可在本模式下获得干净地图（世界恒定），并与 `make_gt_map.py` 真值图对照评估建图质量。
 
 ---
 
@@ -260,6 +300,8 @@ embodied-sim-lite/
 ├── embodied_env.py          # 物理内核（gymnasium 环境）：运动学 + 真分叉里程计 _integrate_odom + 解析 LiDAR + 帧序号 seq
 ├── inference_server.py      # 唯一入口：FastAPI + 60Hz PPO 推理 + WS 广播 + 内联 Three.js 前端（含 OFFLINE 冻结）
 ├── ros_bridge.py            # ROS 2 桥接（需 ROS 2 环境）：孪生状态→/odom·/scan·tf；/cmd_vel→人工覆盖
+├── nav_gateway.py           # 静态世界导航网关（SLAM/Nav2 实验模式）：seed 固定不 reset、10Hz 实时、无 PPO（见 5.9）
+├── make_gt_map.py           # 真值出图：由 seed 布局生成 map_gt.pgm/.yaml（map 帧=世界帧，配合 5.9）
 ├── train_agent.py           # PPO 训练脚本（超实时，剥离时钟）
 ├── ppo_embodied_agent.pth   # 配套预训练权重（开箱复现推理/评测）
 ├── Architecture.md          # 架构说明文档
@@ -285,6 +327,7 @@ embodied-sim-lite/
 - **纯运动学**：物理内核为零惯性运动学积分，未建模动力学/加速率限制。
 - **里程计只"漂移"、不"校正"**：平台提供 Odom 真漂移的可视化与审计，**未实现 EKF/SLAM 等定位校正**。
 - **ROS 2 端到端闭环需自行验证**：`ros_bridge.py` 在 ROS 2 环境下提供 `/odom`+`/scan`+`tf` 与人工覆盖；rviz2/Nav2/SLAM 的完整闭环未在本仓库做自动化验证。第 5 节给出推荐的自行验证路径（SLAM 建图 + Nav2 导航）与逐级判据。
+- **默认演示网关是回合制、超墙钟速的**：每回合重摆障碍、60Hz×`DT=0.1s` 六倍速推进——适合 RL/审计演示；建图与导航量化实验请用静态世界网关 `nav_gateway.py`（5.9），两者 ws 契约一致。
 - **评测为基础指标**：N=25 的随机地图基础指标，非性能调优结果，不含新旧基线对比。
 
 ---

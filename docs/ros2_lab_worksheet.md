@@ -87,6 +87,10 @@ ros2 node list          # 必须确认 /slam_toolbox 在列——「无地图」
 
 rviz2 中 Fixed Frame 切 `map`、Add → Map（`/map`），用 teleop 缓速绕场 1–2 圈。
 
+> 预期管理：默认网关每回合重摆障碍——图中障碍会成叠影，这本身就是「世界在变而系统不自知」
+> 的审计观察素材；本关判据只考察 `map→odom` 校正机制是否生效。需要干净地图或导航成功率
+> 统计 → 用 README 5.9 静态世界模式（`nav_gateway.py`）。
+
 **判据**：
 1. `ros2 topic echo /map --once` 有栅格数据；
 2. `ros2 run tf2_ros tf2_echo map odom` **非恒等且随行程变化**——SLAM 正在校正里程计真漂移（**审计观察点二**）；若恒为单位变换，闭环未打通；
@@ -109,6 +113,9 @@ rviz2 中 Fixed Frame 切 `map`、Add → Map（`/map`），用 teleop 缓速绕
 ```bash
 ros2 launch nav2_bringup navigation_launch.py use_sim_time:=false params_file:=<改后路径>
 ```
+
+> 注：默认网关下回合 reset 会中途重摆世界，判据③『Goal succeeded』偶发达成即视为链路打通；
+> 导航成功率等量化统计务必改用 README 5.9 静态世界模式。
 
 rviz2 用 **2D Goal Pose** 下发目标。**闭环判据（四条全满足才算打通）**：
 1. 桥接终端滚动打印 `🕹️ [人工覆盖下发]`；

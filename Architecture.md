@@ -257,6 +257,8 @@ ros_bridge.py ── {"cmd_vel":{...}} ──▶ OverrideController（2s 窗口�
                                                                         闭环回到真理源
 ```
 
+> 需要静态世界（建图/导航量化）时，真理源可换为 `nav_gateway.py`——同一 `/ws` 契约、10Hz 实时、无回合 reset、无 PPO，桥接与下游零改动（README 5.9）。
+
 ### 7.2 架构要点（为什么这样设计）
 
 1. **真理源唯一性在 ROS 层同样成立**：桥接不做任何状态推演，SLAM/Nav2 消费的是与孪生前端**同一份** `/ws` 广播——ROS 层不存在第二条物理链路，「后端是唯一真理源」的铁律延伸到了 ROS 生态。
@@ -273,6 +275,7 @@ ros_bridge.py ── {"cmd_vel":{...}} ──▶ OverrideController（2s 窗口�
 | **`/scan` QoS 为 BEST_EFFORT** | 桥接 `sensor_qos` | 订阅端（rviz2 等）Reliability 必须选 Best Effort，Reliable 端点不建立连接 |
 | **`/odom` 仅位姿、twist 恒 0** | 契约无速度字段 | 依赖速度反馈的控制器（DWB 评分）可能异常，建议改用 RPP 等 |
 | **时间戳为墙钟** | 桥接 `get_clock().now()` | 全链路 `use_sim_time` 必须为 `false`；跨机部署需 NTP 对时 |
+| **默认网关回合制 + 6 倍墙钟速** | `inference_server.py` 回合结束自动 reset（重摆障碍）；60Hz 心跳 × `DT=0.1s` | SLAM 图叠影、导航统计不可复现——量化实验改用 `nav_gateway.py`（静态世界、10Hz 实时，README 5.9） |
 
 ### 7.4 边界声明
 
