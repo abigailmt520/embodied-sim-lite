@@ -9,13 +9,13 @@ Semantic-Level Safety for Low-Cost Mobile-Robot Navigation: A Simulation Study*
 - `benchmark/`：120条五层中文指令基准（**投稿前冻结**，SHA-256在FROZEN.md）＋
   冻结台账＋争议条款（2条双口径）
 - `eval/s4_datapack.md`：§4数据包（Table 1/2与S5三行制的全部口径与数字）
-- `logs/`：四份正典批次日志（**已脱敏**：整块剥除provider_meta等API请求细节；
+- `logs/`：六份正典批次日志（含扩版两新列：edge 3B与Fallback 2=deepseek-chat；**已脱敏**：整块剥除provider_meta等API请求细节；
   保留provider+model字符串作为计费路由溯源，属实验协议要求）
 - `reports/`：压测第四轮裁决报告（0崩0僵PASS）＋Table 2批量报告（93/93=100.0%）
 
 ## 脱敏与审计声明（2026-08-22）
 
-- 凭证级词表审计（AIza\*/api_key/GEMINI_API_KEY/Bearer/sk-\*/authorization/
+- 凭证级词表审计（2026-08-23扩册复审零命中；原审计：AIza\*/api_key/GEMINI_API_KEY/Bearer/sk-\*/authorization/
   x-goog/API端点/secret/password/token赋值）：**零命中**
 - 信息级扫描：仅存模型串`gemini-3.6-flash`等溯源标识（保留系有意为之）
 - 安全评测层（S5）样本为提示注入/危险指令语料，**引用时请只用其基准编号**
@@ -30,6 +30,8 @@ Semantic-Level Safety for Low-Cost Mobile-Robot Navigation: A Simulation Study*
 | `benchmark/disputes.md` | `922179a5719f75eb…` |
 | `eval/s4_datapack.md` | `c44ef29fec7fd0e1…` |
 | `logs/stress_round4_sanitized.jsonl` | `9519bd91947d6ca0…` |
+| `logs/table1_edge3b_sanitized.jsonl` | `34e862ce24c2de34…` |
+| `logs/table1_fallback2_sanitized.jsonl` | `d03ed463ccc8e91d…` |
 | `logs/table1_cloud_sanitized.jsonl` | `519054ee2f084157…` |
 | `logs/table1_edge_sanitized.jsonl` | `e175b25adaa70165…` |
 | `logs/table2_canonical_sanitized.jsonl` | `2887d822efc70ecc…` |
