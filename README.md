@@ -300,6 +300,15 @@ ros2 launch nav2_bringup bringup_launch.py map:=./map_gt.yaml use_sim_time:=fals
 - `nav_stack_truthloc.sh [map] [params]`：**真值定位**导航栈（map→odom 恒等；24 束稀疏扫描下 AMCL 单腿漂移实测 0.2–0.5 m，量化实验建议用本脚本代替 AMCL 定位）；
 - `traj_logger.py`：10 Hz 轨迹记录到 CSV（实验报告配图/轨迹分析）。
 
+**预期画面（expected view）**——按 5.9 流程起满导航栈后，你的 rviz 应与下图一致
+（真值图+膨胀代价图+航点区域；第二张为下发目标后的实时画面，含全局路径与
+Nav2 面板的 ETA/Time taken 运行时钟，可用于对照你的复现是否一致）：
+
+![expected-view-overview](docs/expected-view-overview.png)
+
+![expected-view-live](docs/expected-view-live.png)
+
+
 ---
 
 ## 6. 目录结构
