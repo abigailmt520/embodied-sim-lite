@@ -2,7 +2,7 @@
 
 配套论文：*A Cloud--Edge Architecture for LLM-Based Instruction Grounding with
 Semantic-Level Safety for Low-Cost Mobile-Robot Navigation: A Simulation Study*
-（投稿中；录用后此处补卷期信息）。本包与论文§4全部数字一一对应。
+（投稿中；录用后此处补卷期信息）。作者：Yue Feng（通讯）、Yuheng Qing。本包与论文§4全部数字一一对应。
 
 ## 内容清单
 
