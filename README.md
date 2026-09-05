@@ -1,3 +1,6 @@
+> 📌 **论文工件快照**：tag `paper87-artifacts`（工件提交 `63da6e7`）· 基准 `artifacts/benchmark/benchmark_v1_frozen.csv` SHA-256 `101477654d98d4d88ba50dc4b73873ca635bb7baff13bb7ae6c69bf4c0ac2d8e` · 路径 `artifacts/`
+> 📌 **Paper-87 artifact snapshot**: tag `paper87-artifacts` (artifacts commit `63da6e7`) · benchmark SHA-256 `101477654d98d4d88ba50dc4b73873ca635bb7baff13bb7ae6c69bf4c0ac2d8e` · path `artifacts/`
+
 # Embodied-SimLite
 
 > **轻量化具身智能数字孪生「验证」平台** —— 面向具身智能教学中的**系统审计素养**培养。
