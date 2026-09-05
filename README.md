@@ -1,5 +1,7 @@
 > 📌 **论文工件快照**：tag `paper87-artifacts`（工件提交 `63da6e7`）· 基准 `artifacts/benchmark/benchmark_v1_frozen.csv` SHA-256 `101477654d98d4d88ba50dc4b73873ca635bb7baff13bb7ae6c69bf4c0ac2d8e` · 路径 `artifacts/`
 > 📌 **Paper-87 artifact snapshot**: tag `paper87-artifacts` (artifacts commit `63da6e7`) · benchmark SHA-256 `101477654d98d4d88ba50dc4b73873ca635bb7baff13bb7ae6c69bf4c0ac2d8e` · path `artifacts/`
+> 📌 **Paper-2 平台快照**：tag `paper2-final`（commit `4f111ad`，独立分支 `paper2-embodied-simlite`，冻结、不并入 master）
+> 📌 **Paper-2 platform snapshot**: tag `paper2-final` (commit `4f111ad`, standalone branch `paper2-embodied-simlite`, frozen, never merged into master)
 
 # Embodied-SimLite
 
