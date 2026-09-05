@@ -7,7 +7,7 @@
 
 - `benchmark/`：120条五层中文指令基准（**投稿前冻结**，SHA-256在FROZEN.md）＋
   冻结台账＋争议条款（2条双口径）
-- `eval/s4_datapack.md`：§4数据包（Table 1/2与S5三行制的全部口径与数字）
+- `eval/s4_datapack.md`：§4数据包（Table 1/2与S5三行制的全部口径与数字；2026-09-05 同步为含四列版表7–9的当前版）
 - `logs/`：六份正典批次日志（含扩版两新列：edge 3B与Fallback 2=deepseek-chat；**已脱敏**：整块剥除provider_meta等API请求细节；
   保留provider+model字符串作为计费路由溯源，属实验协议要求）
 - `reports/`：压测第四轮裁决报告（0崩0僵PASS）＋Table 2批量报告（93/93=100.0%）
@@ -31,7 +31,7 @@
 | `benchmark/FROZEN.md` | `9d2a6a82f623aa24…` |
 | `benchmark/benchmark_v1_frozen.csv` | `101477654d98d4d8…` |
 | `benchmark/disputes.md` | `922179a5719f75eb…` |
-| `eval/s4_datapack.md` | `c44ef29fec7fd0e1…` |
+| `eval/s4_datapack.md` | `245e08b41a1a509c…` |
 | `logs/stress_round4_sanitized.jsonl` | `9519bd91947d6ca0…` |
 | `logs/table1_edge3b_sanitized.jsonl` | `34e862ce24c2de34…` |
 | `logs/table1_fallback2_sanitized.jsonl` | `d03ed463ccc8e91d…` |
@@ -48,7 +48,7 @@
 | `eval/table4_support.md` | `74ac80a456ff2804…` |
 | `eval/derive_s5_attribution.py` | `89e61ec9d255175e…` |
 | `eval/s5_attribution.md` | `00f5c3adb1b9e09a…` |
-| `ERRATA.md` | `612618e3cf835e65…` |
+| `ERRATA.md` | `f45c4854929336f7…` |
 
 复现入口见仓库根README §5.9（静态世界导航模式+真值定位三件套）。
 
