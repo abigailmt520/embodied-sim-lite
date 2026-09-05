@@ -1,8 +1,7 @@
 # artifacts/ — 论文评测数据发布包（P4 · ICCWAMTIP 2026投稿配套）
 
-配套论文：*A Cloud--Edge Architecture for LLM-Based Instruction Grounding with
-Semantic-Level Safety for Low-Cost Mobile-Robot Navigation: A Simulation Study*
-（投稿中；录用后此处补卷期信息）。作者：Yue Feng（通讯）、Yuheng Qing。本包与论文§4全部数字一一对应。
+配套论文：*Cloud--Edge LLM Instruction Grounding with Semantic-Level Safety for Low-Cost Robot Navigation: A Simulation Study*
+（状态：**submitted to ICCWAMTIP 2026 (Paper 87)**；录用后此处补卷期信息）。作者：Yue Feng（通讯）、Yuheng Qing。本包与论文§4全部数字一一对应。
 
 ## 内容清单
 
@@ -12,6 +11,8 @@ Semantic-Level Safety for Low-Cost Mobile-Robot Navigation: A Simulation Study*
 - `logs/`：六份正典批次日志（含扩版两新列：edge 3B与Fallback 2=deepseek-chat；**已脱敏**：整块剥除provider_meta等API请求细节；
   保留provider+model字符串作为计费路由溯源，属实验协议要求）
 - `reports/`：压测第四轮裁决报告（0崩0僵PASS）＋Table 2批量报告（93/93=100.0%）
+- `eval/count_oov_targets.py` + `eval/run_count_oov_targets.sh` + `eval/waypoints.yaml` + `eval/oov_targets_report.md`（2026-09-05 追加）：修订稿 Table 4「Whitelist」行的机械计数——四模型 480 条原始输出中白名单外目标 **0**；脚本原样（SHA256 见 FROZEN「R1描述性计数注记（D4）」），`run_*.sh` 在本包脱敏日志上一键复现
+- `eval/table4_support.md`（2026-09-05 追加）：修订稿 Table 4 五行的数字来源对照
 
 ## 脱敏与审计声明（2026-08-22）
 
@@ -25,7 +26,7 @@ Semantic-Level Safety for Low-Cost Mobile-Robot Navigation: A Simulation Study*
 
 | 文件 | 哈希 |
 |---|---|
-| `benchmark/FROZEN.md` | `072a328b07c3d0ea…` |
+| `benchmark/FROZEN.md` | `bdd1ddf23de9fc4c…` |
 | `benchmark/benchmark_v1_frozen.csv` | `101477654d98d4d8…` |
 | `benchmark/disputes.md` | `922179a5719f75eb…` |
 | `eval/s4_datapack.md` | `c44ef29fec7fd0e1…` |
@@ -38,5 +39,16 @@ Semantic-Level Safety for Low-Cost Mobile-Robot Navigation: A Simulation Study*
 | `reports/stress_report_round4.md` | `e528de0a93b4bb3a…` |
 | `reports/stress_round4_VERDICT-NOTE.md` | `57e2f0bb488d815d…` |
 | `reports/table2_report_canonical.md` | `7954a79406c8a2d7…` |
+| `eval/count_oov_targets.py` | `a83707e7bda9d784…` |
+| `eval/run_count_oov_targets.sh` | `01be1bc69fbdb7f8…` |
+| `eval/waypoints.yaml` | `9f8788e568a38cb6…` |
+| `eval/oov_targets_report.md` | `c84eadecd240ab7a…` |
+| `eval/table4_support.md` | `74ac80a456ff2804…` |
 
 复现入口见仓库根README §5.9（静态世界导航模式+真值定位三件套）。
+
+## 追加记录（2026-09-05）
+
+- FROZEN.md 刷新为论文工作区当前版（纯追加：08-23 压测第四轮哈希补登记、Table 1 第三/四列正典登记；09-04 R1 描述性计数注记（D4）、编号更名注记、核1注记）。
+- 新增 D4 白名单外目标计数工件四件与 Table 4 支撑数据说明（见上文清单）。凭证级词表复审：零命中。
+- 论文状态：submitted to ICCWAMTIP 2026 (Paper 87)。

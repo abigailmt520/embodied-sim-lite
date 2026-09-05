@@ -343,3 +343,72 @@
 - 执行条件：预注册口径（本文件「Table 2预注册」节）＋批量前封存栈＋参数v6(RPP)
   ＋标定v3b＋**真值定位（方法学拍板B）**；冒烟3条先行（202454）
 - 声明：Table2数据采集就此关闭；论文§4以本节为准回填
+
+## 压测第四轮正典哈希补登记 ｜ 2026-08-23（CSO补签令；登记缺口补录，非哈希不符）
+
+- 性质：第四轮裁决（2026-08-22）当时以归档目录+VERDICT-NOTE落档，未入哈希账；
+  本节按CSO补签令补录，判定PASS**追认成立**（依据=冻结判据0/50＋单实例指纹＋防呆流程）
+- stress_report_20260822-155610.md
+  SHA256：`e528de0a93b4bb3afa600c21471898091bb39edaa6fe47ca7ca681ed48da0447`
+- stress_20260822-155610.jsonl
+  SHA256：`9519bd91947d6ca0141b488d7e686c66ffe58fb7a89f0e0a5763c5f45aaf4165`
+- VERDICT-NOTE.md
+  SHA256：`57e2f0bb488d815d19d407dd687457533c47882b6218a999383b1ba13559dd7f`
+- 合读条款（CSO签字逻辑）：件1（abort路径稳定性）与件2（成功路径耐久性，
+  report `7954a794…c57`/jsonl `2887d822…78c`已于「Table2采集完成登记」节在案）
+  合读构成完整可靠性证据
+- 口径注记（附条件②，不改判定、不涉论文数据）：第四轮50条abort的语义归类
+  按四路口径更近env_anomaly/other而非nav2_timeout（车被埋致Nav2弃单=环境异常
+  之果）；正典批量（Table2）归因四路全零，论文数据无涉
+- 附条件①三次无效轮原始件（不入正典，证据目录保留）：
+  results/stress-20260822-invalid-round1/（4 jsonl+4报告+INVALID-NOTE）
+  results/stress-20260822-round2-goalrejected/（2 jsonl+2报告+ROUND2-NOTE）
+  results/stress-20260822-round3-interference/（5 jsonl+4报告+ROUND3-NOTE）
+
+## Table 1第三列（Tier2边缘对照）正典登记 ｜ 2026-08-23（CSO-018拍板9，提名确认版）
+
+- 型号：qwen2.5:3b-instruct（ollama digest `357c53fb659c`，同家族规模对照）
+- 闸门记录：本地冒烟3/3 → 温度闸两跑24条raw_output逐字节零差异
+  （temp3b-a/b_20260823-0336*）→ S1门24/24 → 全量120
+- 正典：`results/tier2_edge-ollama_qwen2.5-3b-instruct_20260823-033645.jsonl`
+  SHA256：`c809b165b76f2a69641989fefd35a634185fea6c552a4b01d630688b7736618a`
+- 数字：**88/120=73.3%**（S1 24/S2 14/S3 21/S4 13/S5 16）；排除争议2条=87/118=73.7%；
+  Wilson95=[64.8,80.4]；时延median 469ms/P95 617ms
+- S5三行制：model_reject 7/14｜system_catch 0/14｜joint 7/14=50%；
+  穿透清单（只引id）：102(乙) 103(甲) 108(甲) 112(甲) 114(甲) 117(乙)＋
+  111**定义外口径注记**：须拒项模型答clarify、屏幕命中prompt_extraction但
+  降级规则仅作用于放行项，故非净拦截亦非运动放行（无运动后果）——如实入表注
+- 用途：Table 1第三列+时延图第三箱+§4.2规模对照句；架构部署位仍为1.5B
+  （3B系对照列，Fig 1不改）
+
+## Table 1第四列（Tier3·Fallback 2云列）正典登记 ｜ 2026-08-23（CSO-018拍板9）
+
+- **备选转正注记**：拍板9提名行「qwen-max日期快照为先/deepseek-chat为备」；
+  主选因主理人无dashscope密钥（其钥为deepseek）未启，备选deepseek-chat转正——
+  属提名文本在案选项，非新增决策。钉定缓解：deepseek-chat系滚动别名，
+  以「闸门记录+同日单批完成+温度闸两跑语义级与字节级双零差异」限定漂移窗口；
+  cloud-openai路径无provider_meta回显，型号串以请求侧OPENAI_COMPAT_MODEL锁定
+- 端点：api.deepseek.com（OpenAI兼容）；密钥卫生三连照旧（.env/gitignore/不回显）
+- 闸门记录：冒烟3/3 → 温度闸S1两跑语义级0差异（字节级也0）→ S1门24/24 → 全量120
+- 正典：`results/tier3_cloud-openai_deepseek-chat_20260823-042527.jsonl`
+  SHA256：`f4e133fea4d0017052a3bf03c2a607b519e6cd702f8b6c144fa728d32d044aaa`
+- 数字：**116/120=96.7%**（S1 24/S2 23/S3 23/S4 22/S5 24）；排除争议=115/118=97.5%；
+  Wilson95=[91.7,98.7]；时延median 767ms/P95 1013ms；零重试零提供商拦截
+- S5三行制：model_reject 14/14｜system_catch 0/14｜joint 14/14=100%（零穿透）
+- 四失分（只引id）：030(S2位置反转) 068(S3争议项) 076/085(S4良性复合过拒)
+- 用途：Table 1/安全表第四列＋时延图第四箱＋Fig 1 Fallback 2实测点名＋
+  摘要"优雅降级"句收口
+
+## R1描述性计数注记（D4）｜ 2026-09-04（CSO-022/R1·拍板12②有条件做，只增不删）
+
+- 性质：**描述性机械计数**，不改任何score字段、不改判分规则、不触正典四文件
+  （哈希同上文各节：教师54a62fb9…/1.5B e175b25a…/3B c809b165…/Fallback 2 f4e133fe…）。
+- 定义：模型原始输出raw_output的JSON中，targets不属于8航点白名单的token计数
+  （即解析器validate()的白名单断言项）；按列分模型报。
+- 结果：1.5B **0/120**｜3B **0/120**｜Fallback 2 **0/120**｜Teacher **0/120**
+  （480条raw全部合法JSON且含targets字段；「白名单外但score=1」张力条目=0，与S1–S5计分零冲突）。
+- 脚本：eval/count_oov_targets.py SHA256 `a83707e7bda9d784b41ec51e607d4011dd105055d610952cbe275cc7d6950a5c`
+  复现：`python3 eval/count_oov_targets.py`（零API调用）；报告：eval/oov_targets_report.md
+- 用途：论文R1 §4.6 Ablations and Sensitivity「Whitelist」行与Table 4末行。
+- 编号更名注记（2026-09-04，CSO-023/R1.1裁定）：上节所称CSO-022/R1即CSO-023/R1；原文不改，只增不删。
+- 核1注记（2026-09-04，CSO-023/R1.1追加）：D4边缘列「by construction」成立条件核验——渲染schema（sort_keys序列化）SHA256与本文件封存值3ad8ca01…一致；action枚举=[go,clarify,reject]，targets枚举=白名单8 id（src/llm_nav_parser.py:72–73）；正典240条边缘raw全部合规。只增不删。

@@ -1,0 +1,48 @@
+# 语义航点词表（单一事实源：解析器提示词/schema、Nav2下发均由本表生成）
+# 与冻结基准 benchmark/p4-benchmark-v1.md 第一节词表同源；改名只改本表，代码零改动。
+# 注意：aliases 只放地点的通用同义词（来自词表中文名/说明列），禁止照抄测试集句式——
+#       口语理解能力正是被测对象，往词表里塞考题原句=作弊。
+# pose 坐标系：map帧，建图后用 rviz2 "Publish Point" 标定回填。
+waypoints:
+  - id: W1_door
+    name: 门口
+    aliases: [大门, 实验室门口]
+    pose: {x: 0.0, y: 0.0, yaw: 0.0}   # TODO: 建图后标定
+  - id: W2_charge
+    name: 充电站
+    aliases: [充电桩, 充电点]
+    pose: {x: 0.0, y: 0.0, yaw: 0.0}   # TODO: 建图后标定
+  - id: W3_podium
+    name: 讲台
+    aliases: [教师位]
+    pose: {x: 0.0, y: 0.0, yaw: 0.0}   # TODO: 建图后标定
+  - id: W4_shelf
+    name: 器材架
+    aliases: [货架, 工具架]
+    pose: {x: 0.0, y: 0.0, yaw: 0.0}   # TODO: 建图后标定
+  - id: W5_window
+    name: 窗边
+    aliases: [靠窗区域]
+    pose: {x: 0.0, y: 0.0, yaw: 0.0}   # TODO: 建图后标定
+  - id: W6_bench
+    name: 实验台
+    aliases: [学生实验桌]
+    pose: {x: 0.0, y: 0.0, yaw: 0.0}   # TODO: 建图后标定
+  - id: W7_trash
+    name: 垃圾桶
+    aliases: [垃圾箱]
+    pose: {x: 0.0, y: 0.0, yaw: 0.0}   # TODO: 建图后标定
+  - id: W8_home
+    name: 出发点
+    aliases: [车库, 起始位]
+    pose: {x: 0.0, y: 0.0, yaw: 0.0}   # TODO: 建图后标定
+
+# 邻接声明（供空间关系解析：隔壁/最近等判断只依据本表）
+adjacency:
+  - [W2_charge, W4_shelf]
+  - [W3_podium, W5_window]
+  - [W6_bench, W7_trash]
+  - [W1_door, W8_home]
+
+# 无特别说明时车辆所在位置
+default_position: W8_home
