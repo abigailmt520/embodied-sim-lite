@@ -83,25 +83,32 @@ def report(hits, label):
     return 0
 
 def self_test(rules):
-    """注入假密钥形态的临时文件（未跟踪），扫描工作树必须拦截；随后删除，再扫必须回到基线。"""
+    """注入假密钥形态的临时文件（未跟踪），①直接扫该文件必须命中≥4行；②工作树扫描必须把它列为命中；
+    随后删除临时文件，再扫必须回到基线。任一不满足→exit 2。"""
     base = scan_worktree(rules)
-    fd, tmp = tempfile.mkstemp(prefix=".audit_selftest_", suffix=".txt", dir="tools", text=True)
+    fd, tmp_abs = tempfile.mkstemp(prefix=".audit_selftest_", suffix=".txt", dir="tools", text=True)
+    tmp = os.path.relpath(tmp_abs, os.getcwd()).replace(os.sep, "/")   # 与 git ls-files 的相对路径口径一致
     try:
         with os.fdopen(fd, "w") as f:
             f.write("fake1 = sk-test-abcdefghijklmnopqrstuvwxyz0123\n")
             f.write("fake2 = AKIAABCDEFGHIJKLMNOP\n")
             f.write("GEMINI_API_KEY=AIzaSyFAKEFAKEFAKEFAKEFAKEFAKEFAKE\n")
             f.write("Authorization: Bearer abcdefghijklmnopqrstuvwxyz\n")
+        direct = []
+        with open(tmp, "rb") as f:
+            scan_blob(tmp, f.read(), rules, direct)
         with_tmp = scan_worktree(rules)
-        injected = [h for h in with_tmp if h[0] == tmp.replace(os.sep, "/")]
-        caught = len(injected) >= 4
-        print(f"self-test: 注入 {tmp} 4 行假密钥 → 命中 {len(injected)} 行 → {'拦截 ✔' if caught else '未拦截 ✘'}")
+        injected = [h for h in with_tmp if h[0] == tmp]
+        ok_direct, ok_wt = len(direct) >= 4, len(injected) >= 4
+        print(f"self-test: 注入 {tmp} 4 行假密钥 → 直接扫描命中 {len(direct)} 行 {'✔' if ok_direct else '✘'}；工作树扫描命中 {len(injected)} 行 {'✔' if ok_wt else '✘（未跟踪文件被忽略或路径口径不一致）'}")
     finally:
         os.remove(tmp)
     after = scan_worktree(rules)
-    clean = (after == base)
-    print(f"self-test: 删除临时文件后命中恢复基线（{len(base)} 处）→ {'✔' if clean else '✘'}；临时文件已删除：{not os.path.exists(tmp)}")
-    return 0 if (caught and clean and not os.path.exists(tmp)) else 2
+    clean = (after == base) and not os.path.exists(tmp)
+    print(f"self-test: 删除临时文件后命中恢复基线（{len(base)} 处）{'✔' if clean else '✘'}；临时文件已删除：{not os.path.exists(tmp)}")
+    passed = ok_direct and ok_wt and clean
+    print("self-test:", "PASS" if passed else "FAIL")
+    return 0 if passed else 2
 
 def main(argv):
     os.chdir(sh("git", "rev-parse", "--show-toplevel").strip())
