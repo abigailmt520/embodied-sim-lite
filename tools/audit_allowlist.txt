@@ -1,0 +1,5 @@
+# 凭证审计 allowlist：路径glob<TAB>行正则（两者同时匹配的命中行被排除）。仅收人工复核过的非凭证文本。
+artifacts/README.md	凭证级词表审计
+artifacts/README.md	x-goog/API端点/secret/password/token赋值
+tools/audit_secrets.py	.*
+tools/audit_allowlist.txt	.*
