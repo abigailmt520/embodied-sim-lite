@@ -13,6 +13,8 @@
 - `reports/`：压测第四轮裁决报告（0崩0僵PASS）＋Table 2批量报告（93/93=100.0%）
 - `eval/count_oov_targets.py` + `eval/run_count_oov_targets.sh` + `eval/waypoints.yaml` + `eval/oov_targets_report.md`（2026-09-05 追加）：修订稿 Table 4「Whitelist」行的机械计数——四模型 480 条原始输出中白名单外目标 **0**；脚本原样（SHA256 见 FROZEN「R1描述性计数注记（D4）」），`run_*.sh` 在本包脱敏日志上一键复现
 - `eval/table4_support.md`（2026-09-05 追加）：修订稿 Table 4 五行的数字来源对照
+- `eval/derive_s5_attribution.py` + `eval/s5_attribution.md`（2026-09-05 勘误随附）：S5 须拒子集逐条处置（reject / clarify / grant→航点）与 Table 5 三行的派生脚本及输出，内置对论文的逐格断言；**安全层归因以此为准**
+- `ERRATA.md`（2026-09-05）：3B S5 穿透成因标签勘误说明；`paper87-artifacts-r3` 取代 `paper87-artifacts`
 
 ## 脱敏与审计声明（2026-08-22）
 
@@ -26,7 +28,7 @@
 
 | 文件 | 哈希 |
 |---|---|
-| `benchmark/FROZEN.md` | `bdd1ddf23de9fc4c…` |
+| `benchmark/FROZEN.md` | `9d2a6a82f623aa24…` |
 | `benchmark/benchmark_v1_frozen.csv` | `101477654d98d4d8…` |
 | `benchmark/disputes.md` | `922179a5719f75eb…` |
 | `eval/s4_datapack.md` | `c44ef29fec7fd0e1…` |
@@ -44,6 +46,9 @@
 | `eval/waypoints.yaml` | `9f8788e568a38cb6…` |
 | `eval/oov_targets_report.md` | `c84eadecd240ab7a…` |
 | `eval/table4_support.md` | `74ac80a456ff2804…` |
+| `eval/derive_s5_attribution.py` | `89e61ec9d255175e…` |
+| `eval/s5_attribution.md` | `00f5c3adb1b9e09a…` |
+| `ERRATA.md` | `612618e3cf835e65…` |
 
 复现入口见仓库根README §5.9（静态世界导航模式+真值定位三件套）。
 
@@ -52,3 +57,4 @@
 - FROZEN.md 刷新为论文工作区当前版（纯追加：08-23 压测第四轮哈希补登记、Table 1 第三/四列正典登记；09-04 R1 描述性计数注记（D4）、编号更名注记、核1注记）。
 - 新增 D4 白名单外目标计数工件四件与 Table 4 支撑数据说明（见上文清单）。凭证级词表复审：零命中。
 - 论文状态：submitted to ICCWAMTIP 2026 (Paper 87)。
+- 2026-09-05 勘误（CSO-025）：表8 3B 穿透清单甲/乙标签作废（七条实为 clarify、零运动），FROZEN 追加勘误条与派生脚本注记，新增 ERRATA.md；引用点改为 tag paper87-artifacts-r3。
