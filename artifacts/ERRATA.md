@@ -8,3 +8,7 @@
 - **根因**：08-23 扩版登记时沿用了 1.5B 同 id 的甲/乙分类（1.5B 的同 id 项确为 grant 放行）。
 - **派生口径**：自本日起安全层归因以 `eval/derive_s5_attribution.py` 的输出 `eval/s5_attribution.md` 为准（脚本内置对 Table 5 与 §5.1 的逐格断言）。
 - **tag 说明**：`paper87-artifacts`（a1b3823）为勘误前快照，保留不动；`paper87-artifacts-r3` 为勘误后快照，取代前者作为引用点。
+
+### 快照说明（2026-09-05 补记）
+- `paper87-artifacts-r3`（b02426b）快照内的 `eval/s4_datapack.md` 仍为 08-23 扩册前旧版（两列版，不含四列版表7–9）：勘误提交时按论文工作区文本编写的替换规则未匹配到旧版文本，该文件未随第一次勘误提交更新；快照内 ERRATA.md 与 FROZEN.md 已正确，日志与哈希不受影响，无错误标签、只是缺节。
+- 已于随后的同步提交补齐（表7–9 含带勘误注的表8）；`paper87-artifacts-r3.1` 取代 r3 作为引用点（supersedes r3: datapack 3B section added）。r3 与更早的 `paper87-artifacts` 均保留不动。

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # 公开仓推送的唯一入口：自测 → 待推引用全树审计 → 推送。任一环节非零即停，不推。
 # 用法：tools/publish.sh [--tag NAME ...] [--allow-frozen] [branch] [remote ...]
-#   --tag NAME 只推送指定 tag（可重复）；不再提供 --tags（推送全部本地 tag 曾把无关 tag 带入审计并拒推）。
+#   --tag NAME 只推送指定 tag（可重复），且 NAME 须匹配前缀白名单 paper*-* 或 p5-*，其余拒推（exit 4）；
+#   不再提供 --tags（推送全部本地 tag 曾把无关 tag 带入审计并拒推）。
 #   branch 默认=当前分支；remote 默认=全部远端。--tags 同时推送 tags。
 # 冻结分支（论文态/独立快照，不再提交）：paper-sync-v1.1、paper2-embodied-simlite —— 默认拒绝推送；
 #   仅镜像同步（内容不变地推到另一远端）可用 --allow-frozen 显式放行，仍经审计。
@@ -9,7 +10,10 @@ set -uo pipefail
 FROZEN_BRANCHES="paper-sync-v1.1 paper2-embodied-simlite"
 TAGS=""; ALLOW_FROZEN=0
 while [ "${1:-}" = "--tag" ] || [ "${1:-}" = "--allow-frozen" ]; do
-  if [ "$1" = "--tag" ]; then TAGS="$TAGS refs/tags/$2"; shift 2; else ALLOW_FROZEN=1; shift; fi
+  if [ "$1" = "--tag" ]; then
+    case "$2" in paper*-*|p5-*) TAGS="$TAGS refs/tags/$2" ;; *) echo "publish: tag $2 不在前缀白名单（paper*-* / p5-*），拒推" >&2; exit 4 ;; esac
+    shift 2
+  else ALLOW_FROZEN=1; shift; fi
 done
 ROOT="$(git rev-parse --show-toplevel)" || exit 2; cd "$ROOT"
 BRANCH="${1:-$(git branch --show-current)}"; shift || true

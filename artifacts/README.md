@@ -48,7 +48,7 @@
 | `eval/table4_support.md` | `74ac80a456ff2804…` |
 | `eval/derive_s5_attribution.py` | `89e61ec9d255175e…` |
 | `eval/s5_attribution.md` | `00f5c3adb1b9e09a…` |
-| `ERRATA.md` | `f45c4854929336f7…` |
+| `ERRATA.md` | `345446f563a3b3de…` |
 
 复现入口见仓库根README §5.9（静态世界导航模式+真值定位三件套）。
 
