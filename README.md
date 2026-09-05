@@ -1,5 +1,5 @@
-> 📌 **论文工件快照**：tag `paper87-artifacts-r3`（工件提交 `59a3a48`；取代 `paper87-artifacts`，勘误：3B S5 成因标签，见 artifacts/ERRATA.md）· 基准 `artifacts/benchmark/benchmark_v1_frozen.csv` SHA-256 `101477654d98d4d88ba50dc4b73873ca635bb7baff13bb7ae6c69bf4c0ac2d8e` · 路径 `artifacts/`
-> 📌 **Paper-87 artifact snapshot**: tag `paper87-artifacts-r3` (artifacts commit `59a3a48`; supersedes `paper87-artifacts` — erratum: 3B S5 cause labels, see artifacts/ERRATA.md) · benchmark SHA-256 `101477654d98d4d88ba50dc4b73873ca635bb7baff13bb7ae6c69bf4c0ac2d8e` · path `artifacts/`
+> 📌 **论文工件快照**：tag `paper87-artifacts-r3.1`（工件提交 `7a071a2`；取代 `paper87-artifacts-r3`：datapack 补齐 3B 节；r3 与 `paper87-artifacts` 保留，勘误见 artifacts/ERRATA.md）· 基准 `artifacts/benchmark/benchmark_v1_frozen.csv` SHA-256 `101477654d98d4d88ba50dc4b73873ca635bb7baff13bb7ae6c69bf4c0ac2d8e` · 路径 `artifacts/`
+> 📌 **Paper-87 artifact snapshot**: tag `paper87-artifacts-r3.1` (artifacts commit `7a071a2`; supersedes r3 — datapack 3B section added; r3 and `paper87-artifacts` retained, see artifacts/ERRATA.md) · benchmark SHA-256 `101477654d98d4d88ba50dc4b73873ca635bb7baff13bb7ae6c69bf4c0ac2d8e` · path `artifacts/`
 > 📌 **Paper-2 平台快照**：tag `paper2-final`（commit `4f111ad`，独立分支 `paper2-embodied-simlite`，冻结、不并入 master）
 > 📌 **Paper-2 platform snapshot**: tag `paper2-final` (commit `4f111ad`, standalone branch `paper2-embodied-simlite`, frozen, never merged into master)
 
