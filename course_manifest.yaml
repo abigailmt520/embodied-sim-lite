@@ -26,7 +26,7 @@ paper:
 
 golden:
   dir: golden/course-2026A                # golden 基准输出集（course tag 下旧入口产物录制，归一化后字节 + 哈希清单）
-  policy: strict                          # 裁定②收敛后：任何机器强制（11 件逐字节 + 4 件 session 容差等价）；bench-strict/report 仅供调试
+  policy: strict                          # 裁定②收敛后：任何机器强制（9 件逐字节；4 件 session 舍4位+容差等价；2 件 PNG 像素精确等价）；bench-strict/report 仅供调试
   bench_machine: tools/bench/BENCH-MACHINE.md
   env:                                    # 录制与复跑统一的运行环境（确定性）
     OMP_NUM_THREADS: "1"
@@ -54,7 +54,7 @@ entries:
     outputs:
       - {path: audit/eval_episodes.csv}
       - {path: audit/eval_summary.json, normalize: [json_drop_keys], drop_keys: [generated_at]}
-      - {path: audit/eval_metrics.png, normalize: [png_canonical]}   # 跨平台像素同、编码异→规范化重编码
+      - {path: audit/eval_metrics.png, compare: pixel_exact}   # 跨平台像素同、PNG 容器字节异（各平台 zlib 不同）→ 比像素不比容器
       - {path: audit/sessions/healthy.json, normalize: [json_round], round_digits: 4, compare: numeric_tol, tol: 1.0e-4}   # 定点化+容差等价（裁定②，理由见 FROZEN-CI §2）
       - {path: audit/sessions/injected_1-A_truth_copy.json, normalize: [json_round], round_digits: 4, compare: numeric_tol, tol: 1.0e-4}   # 定点化+容差等价（裁定②，理由见 FROZEN-CI §2）
       - {path: audit/sessions/injected_1-B_seq_freeze.json, normalize: [json_round], round_digits: 4, compare: numeric_tol, tol: 1.0e-4}   # 定点化+容差等价（裁定②，理由见 FROZEN-CI §2）
@@ -66,7 +66,7 @@ entries:
     outputs:
       - {path: diagnostics/fork_before.csv}
       - {path: diagnostics/fork_after.csv}
-      - {path: diagnostics/fork_error_curve.png, normalize: [png_canonical]}
+      - {path: diagnostics/fork_error_curve.png, compare: pixel_exact}
     stdout: {path: diagnostics/record_fork.stdout.txt, normalize: [strip_root]}
   - id: gt_map
     desc: 静态世界真值出图（seed 42；pgm 哈希与 FROZEN.md 世界定义 16522b3b… 同源）

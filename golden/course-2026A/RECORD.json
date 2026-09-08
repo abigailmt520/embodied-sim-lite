@@ -1,7 +1,7 @@
 {
   "tag": "course-2026A",
   "commit": "bc8fa5018592c0efdadc3c471be16f46dc422dc1",
-  "recorded": "2026-09-08T04:06:59-07:00",
+  "recorded": "2026-09-08T04:10:50-07:00",
   "fingerprint": {
     "system": "Darwin",
     "machine": "arm64",
@@ -38,11 +38,9 @@
       ],
       [
         "audit/eval_metrics.png",
-        [
-          "png_canonical"
-        ],
         null,
         null,
+        "pixel_exact",
         null
       ],
       [
@@ -85,11 +83,9 @@
     "fork": [
       [
         "diagnostics/fork_error_curve.png",
-        [
-          "png_canonical"
-        ],
         null,
         null,
+        "pixel_exact",
         null
       ]
     ],
@@ -113,6 +109,12 @@
       "at": "2026-09-08T04:06:59-07:00",
       "reason": "CSO-028-R1 裁定②收敛第二针：CI 实测 6 位舍入仍在边界翻转（4 份 session 各 50 处、|Δ|=1e-6），PNG 像素 0 差仅编码异 → session 改舍 4 位＋数值容差 1e-4 等价比较，PNG 规范化重编码；策略收紧 strict",
       "prev_recorded": "2026-09-08T03:58:40-07:00",
+      "prev_files": 15
+    },
+    {
+      "at": "2026-09-08T04:10:50-07:00",
+      "reason": "CSO-028-R1 裁定②第三针：CI 实测 PNG 规范化重编码跨平台仍异（各平台 Pillow 捆绑 zlib 的 deflate 流不同），改为像素精确比较（compare: pixel_exact），golden 存基准机原始 PNG；session 舍 4 位后 CI 已逐字节同，容差规则保留作确定性护栏",
+      "prev_recorded": "2026-09-08T04:06:59-07:00",
       "prev_files": 15
     }
   ]

@@ -160,14 +160,6 @@ def normalize(data: bytes, rules, ctx) -> bytes:
                 return v
             obj = _rnd(json.loads(data.decode("utf-8")))
             data = (json.dumps(obj, ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8")
-        elif rule == "png_canonical":
-            # PNG 规范化重编码（CSO-028-R1 裁定②）：跨平台像素相同但编码字节不同（zlib/元数据），
-            # 解码→RGBA→固定参数重编码、去元数据，使逐字节比较只看像素
-            import io as _io
-            from PIL import Image
-            im = Image.open(_io.BytesIO(data)).convert("RGBA")
-            buf = _io.BytesIO(); im.save(buf, format="PNG", optimize=False, compress_level=6)
-            data = buf.getvalue()
         elif rule == "strip_root":
             text = data.decode("utf-8", "replace")
             for path, tag in ctx.get("paths", []):
@@ -237,6 +229,20 @@ def numeric_tol_equal(a: bytes, b: bytes, tol: float):
             state["hard"] += 1
     walk(ja, jb)
     return state["hard"] == 0, state["max"], state["n"]
+
+
+def pixel_exact_equal(a: bytes, b: bytes):
+    """PNG 像素精确等价：解码→RGBA→逐像素相等（零容差）。比内容不比容器——各平台 Pillow 捆绑 zlib 不同，PNG 字节不可跨平台确定。"""
+    import io as _io
+    from PIL import Image
+    ia, ib = Image.open(_io.BytesIO(a)).convert("RGBA"), Image.open(_io.BytesIO(b)).convert("RGBA")
+    if ia.size != ib.size:
+        return False, f"尺寸 {ia.size} vs {ib.size}"
+    da, db = ia.tobytes(), ib.tobytes()
+    if da == db:
+        return True, f"{ia.size[0]}x{ia.size[1]} 像素全同"
+    n = sum(1 for x, y in zip(da, db) if x != y)
+    return False, f"{n} 字节像素差"
 
 
 def run_all_entries(tree: Path, manifest, env, only=None):
@@ -370,11 +376,14 @@ def gate_course(manifest, cache):
             if sp.get("compare") == "numeric_tol":
                 ok, mx, n = numeric_tol_equal(golden[k], outs_b[k], float(sp.get("tol", 1e-4)))
                 (tol_ok if ok else bad).append(f"{k}（容差等价，{n} 处数值差，最大|Δ|={mx:.1e}）" if ok else f"{k}（超容差/结构异，最大|Δ|={mx:.1e}）")
+            elif sp.get("compare") == "pixel_exact":
+                ok, why = pixel_exact_equal(golden[k], outs_b[k])
+                (tol_ok if ok else bad).append(f"{k}（像素精确等价，{why}；容器字节异）" if ok else f"{k}（像素不等：{why}）")
             else:
                 bad.append(k)
-        summary = f"逐字节 {len(exact)} + 容差等价 {len(tol_ok)} = {len(exact) + len(tol_ok)}/{len(outs_b)}"
+        summary = f"逐字节 {len(exact)} + 内容等价 {len(tol_ok)} = {len(exact) + len(tol_ok)}/{len(outs_b)}"
         if tol_ok:
-            rep.info("容差等价件：" + "；".join(tol_ok))
+            rep.info("内容等价件（非逐字节）：" + "；".join(tol_ok))
         if pol == "strict":
             rep.check(not bad and not missing, f"HEAD 产物与 golden 一致：{summary}", f"与 golden 不一致（{summary}）：{bad + missing}")
         else:
