@@ -1,7 +1,7 @@
 {
   "tag": "course-2026A",
   "commit": "bc8fa5018592c0efdadc3c471be16f46dc422dc1",
-  "recorded": "2026-09-08T03:58:40-07:00",
+  "recorded": "2026-09-08T04:06:59-07:00",
   "fingerprint": {
     "system": "Darwin",
     "machine": "arm64",
@@ -32,6 +32,17 @@
         [
           "json_drop_keys"
         ],
+        null,
+        null,
+        null
+      ],
+      [
+        "audit/eval_metrics.png",
+        [
+          "png_canonical"
+        ],
+        null,
+        null,
         null
       ],
       [
@@ -39,31 +50,49 @@
         [
           "json_round"
         ],
-        6
+        4,
+        "numeric_tol",
+        0.0001
       ],
       [
         "audit/sessions/injected_1-A_truth_copy.json",
         [
           "json_round"
         ],
-        6
+        4,
+        "numeric_tol",
+        0.0001
       ],
       [
         "audit/sessions/injected_1-B_seq_freeze.json",
         [
           "json_round"
         ],
-        6
+        4,
+        "numeric_tol",
+        0.0001
       ],
       [
         "audit/sessions/injected_1-C_stall_running.json",
         [
           "json_round"
         ],
-        6
+        4,
+        "numeric_tol",
+        0.0001
       ]
     ],
-    "fork": [],
+    "fork": [
+      [
+        "diagnostics/fork_error_curve.png",
+        [
+          "png_canonical"
+        ],
+        null,
+        null,
+        null
+      ]
+    ],
     "gt_map": []
   },
   "history": [
@@ -78,6 +107,12 @@
       "at": "2026-09-08T03:58:40-07:00",
       "reason": "CSO-028-R1 裁定②：session JSON 定点化归一（json_round 6 位，消跨 BLAS 浮点末位差）＋ CI 依赖钉版 requirements-ci.txt；目标跨平台 golden 15/15",
       "prev_recorded": "2026-09-08T02:55:25-07:00",
+      "prev_files": 15
+    },
+    {
+      "at": "2026-09-08T04:06:59-07:00",
+      "reason": "CSO-028-R1 裁定②收敛第二针：CI 实测 6 位舍入仍在边界翻转（4 份 session 各 50 处、|Δ|=1e-6），PNG 像素 0 差仅编码异 → session 改舍 4 位＋数值容差 1e-4 等价比较，PNG 规范化重编码；策略收紧 strict",
+      "prev_recorded": "2026-09-08T03:58:40-07:00",
       "prev_files": 15
     }
   ]

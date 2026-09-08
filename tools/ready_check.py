@@ -160,6 +160,14 @@ def normalize(data: bytes, rules, ctx) -> bytes:
                 return v
             obj = _rnd(json.loads(data.decode("utf-8")))
             data = (json.dumps(obj, ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8")
+        elif rule == "png_canonical":
+            # PNG 规范化重编码（CSO-028-R1 裁定②）：跨平台像素相同但编码字节不同（zlib/元数据），
+            # 解码→RGBA→固定参数重编码、去元数据，使逐字节比较只看像素
+            import io as _io
+            from PIL import Image
+            im = Image.open(_io.BytesIO(data)).convert("RGBA")
+            buf = _io.BytesIO(); im.save(buf, format="PNG", optimize=False, compress_level=6)
+            data = buf.getvalue()
         elif rule == "strip_root":
             text = data.decode("utf-8", "replace")
             for path, tag in ctx.get("paths", []):
@@ -197,6 +205,38 @@ def run_entry(tree: Path, entry, env) -> dict:
         return outs
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+
+
+def output_specs(manifest):
+    """{golden相对路径: 输出规格} —— 供 golden 对照按 compare 模式分派。"""
+    d = {}
+    for e in manifest["entries"]:
+        for o in e.get("outputs", []):
+            d[o.get("as", o["path"])] = o
+    return d
+
+
+def numeric_tol_equal(a: bytes, b: bytes, tol: float):
+    """JSON 数值容差等价：结构/键/整数/布尔/字符串逐一精确相等，浮点 |Δ|≤tol。返回 (相等, 最大|Δ|, 差异计数)。"""
+    ja, jb = json.loads(a.decode("utf-8")), json.loads(b.decode("utf-8"))
+    state = {"max": 0.0, "n": 0, "hard": 0}
+    def walk(x, y):
+        if isinstance(x, dict) and isinstance(y, dict):
+            if x.keys() != y.keys(): state["hard"] += 1; return
+            for k in x: walk(x[k], y[k])
+        elif isinstance(x, list) and isinstance(y, list):
+            if len(x) != len(y): state["hard"] += 1; return
+            for u, v in zip(x, y): walk(u, v)
+        elif isinstance(x, bool) or isinstance(y, bool) or isinstance(x, str) or isinstance(y, str) or x is None or y is None:
+            if x != y: state["hard"] += 1
+        elif isinstance(x, (int, float)) and isinstance(y, (int, float)):
+            d = abs(x - y)
+            if d > 0: state["n"] += 1; state["max"] = max(state["max"], d)
+            if d > tol: state["hard"] += 1
+        else:
+            state["hard"] += 1
+    walk(ja, jb)
+    return state["hard"] == 0, state["max"], state["n"]
 
 
 def run_all_entries(tree: Path, manifest, env, only=None):
@@ -319,13 +359,26 @@ def gate_course(manifest, cache):
     # golden 对照
     pol = golden_policy(manifest, rep)
     if golden:
-        gd = [k for k in sorted(outs_b) if golden.get(k) != outs_b[k]]
-        missing = [k for k in sorted(outs_b) if k not in golden]
+        specs = output_specs(manifest)
+        exact, tol_ok, bad, missing = [], [], [], []
+        for k in sorted(outs_b):
+            if k not in golden:
+                missing.append(k); continue
+            if golden[k] == outs_b[k]:
+                exact.append(k); continue
+            sp = specs.get(k, {})
+            if sp.get("compare") == "numeric_tol":
+                ok, mx, n = numeric_tol_equal(golden[k], outs_b[k], float(sp.get("tol", 1e-4)))
+                (tol_ok if ok else bad).append(f"{k}（容差等价，{n} 处数值差，最大|Δ|={mx:.1e}）" if ok else f"{k}（超容差/结构异，最大|Δ|={mx:.1e}）")
+            else:
+                bad.append(k)
+        summary = f"逐字节 {len(exact)} + 容差等价 {len(tol_ok)} = {len(exact) + len(tol_ok)}/{len(outs_b)}"
+        if tol_ok:
+            rep.info("容差等价件：" + "；".join(tol_ok))
         if pol == "strict":
-            rep.check(not gd and not missing, f"HEAD 产物与 golden 逐字节一致（{len(outs_b)} 件）", f"与 golden 不一致：{gd + missing}")
+            rep.check(not bad and not missing, f"HEAD 产物与 golden 一致：{summary}", f"与 golden 不一致（{summary}）：{bad + missing}")
         else:
-            rep.info(f"golden 对照（report）：一致 {len(outs_b) - len(gd) - len(missing)} / 不一致 {len(gd)} / golden 缺 {len(missing)}"
-                     + (f"；不一致件：{gd}" if gd else ""))
+            rep.info(f"golden 对照（report）：{summary}；不一致 {len(bad)} / golden 缺 {len(missing)}" + (f"；不一致件：{bad}" if bad else ""))
     return rep
 
 
@@ -503,7 +556,7 @@ def record_golden(manifest, force):
     rec = {"tag": tag, "commit": rev(tag + "^{commit}"), "recorded": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
            "fingerprint": machine_fingerprint(), "env": manifest["golden"].get("env") or {},
            "entries": [e["id"] for e in manifest["entries"]], "files": len(outs),
-           "normalization": {e["id"]: [(o.get("as", o["path"]), o.get("normalize"), o.get("round_digits")) for o in e.get("outputs", []) if o.get("normalize")]
+           "normalization": {e["id"]: [(o.get("as", o["path"]), o.get("normalize"), o.get("round_digits"), o.get("compare"), o.get("tol")) for o in e.get("outputs", []) if o.get("normalize") or o.get("compare")]
                              for e in manifest["entries"]},
            "history": history}
     (gdir / "RECORD.json").write_text(json.dumps(rec, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
