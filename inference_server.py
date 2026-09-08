@@ -26,6 +26,8 @@ inference_server.py
 
 import asyncio
 import json
+import os
+import sys
 from contextlib import asynccontextmanager
 
 import numpy as np
@@ -106,8 +108,33 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
+# ====================================================================
+# slip 开关（FORGE-002 任务七重做；加法＋默认关闭）
+# ====================================================================
+def _resolve_slip() -> float | None:
+    """解析里程计打滑系数的显式覆盖值；**未指定时返回 None＝不改变任何行为**。
+
+    优先级：命令行 `--slip 0.0`（或 `--slip=0.0`）> 环境变量 `SLIP` > None。
+    返回 None 时调用方按原样构造 env（不传 slip），类默认 SLIP_FACTOR=0.05 生效——
+    即**开关关闭态与 course-2026A 冻结面逐字节等价**（ITERATION.md「加法＋开关」）。
+    slip=0 时里程计逐位退化为真值（odom ≡ truth），是审计「退化检验」的对照档。
+    """
+    argv = sys.argv
+    for i, a in enumerate(argv):
+        if a == "--slip" and i + 1 < len(argv):
+            return float(argv[i + 1])
+        if a.startswith("--slip="):
+            return float(a.split("=", 1)[1])
+    v = os.environ.get("SLIP")
+    return float(v) if v not in (None, "") else None
+
+
+_SLIP_OVERRIDE = _resolve_slip()
+
 # 全局单例：推理环境内核 + 策略模型（在 lifespan 中初始化）
-env = EmbodiedNavEnv(render_mode=None)
+# 开关关闭（_SLIP_OVERRIDE is None）时走原调用，不传 slip —— 行为与开关引入前完全一致
+env = (EmbodiedNavEnv(render_mode=None) if _SLIP_OVERRIDE is None
+       else EmbodiedNavEnv(render_mode=None, slip=_SLIP_OVERRIDE))
 model: PPO | None = None
 
 
@@ -181,6 +208,9 @@ async def lifespan(app: FastAPI):
     global model
     model = load_model()
     print(f">>> 模型已载入: {MODEL_PATH}，启动 {TICK_HZ:.0f}Hz 孪生推理心跳...")
+    if _SLIP_OVERRIDE is not None:   # 仅在开关打开时多打一行；关闭态 stdout 与引入前逐字节一致
+        print(f">>> [slip 开关] 里程计打滑系数 slip={env.slip_factor}"
+              f"（来源：--slip / SLIP；slip=0 ⇒ odom ≡ truth 退化对照档）")
     task = asyncio.create_task(simulation_loop())
     try:
         yield
@@ -228,12 +258,15 @@ async def websocket_endpoint(ws: WebSocket):
 @app.get("/health")
 async def health():
     """健康检查 / 连接信息。"""
-    return {
+    body = {
         "service": "Embodied-SimLite Inference Gateway",
         "tick_hz": TICK_HZ,
         "clients": len(manager.active),
         "ws_endpoint": "/ws",
     }
+    if _SLIP_OVERRIDE is not None:   # 加法：开关关闭时不出现此键，旧响应逐字节不变
+        body["slip"] = env.slip_factor
+    return body
 
 
 # ====================================================================

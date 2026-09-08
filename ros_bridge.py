@@ -71,6 +71,20 @@ class EmbodiedRos2Bridge(Node):
         self.ws = None
         self.log_counter = 0
         self.last_step = -1   # 以 render_state 的 step 去重，避免重复发布同一帧
+        self.reconnect_attempts = 0
+
+        # —— 先声明后发布（FORGE-002 任务七）：启动即打印话题/frame/QoS 契约概要，
+        #    供学生用 `ros2 topic info --verbose` 逐条核实（契约见 docs/teaching_api.md §3）——
+        self.get_logger().info(
+            "📋 桥接契约声明（先声明后发布）：\n"
+            "    发布 /odom     nav_msgs/Odometry      QoS RELIABLE/VOLATILE depth=10  "
+            "frame odom→base_footprint（漂移里程计，位姿＋有限差分 twist）\n"
+            "    发布 /scan     sensor_msgs/LaserScan  QoS BEST_EFFORT/VOLATILE depth=10  "
+            "frame laser_frame（24 线 360°，量程取契约 lidar_range）\n"
+            "    广播 tf        odom→base_footprint→base_link 及 base_footprint→laser_frame\n"
+            "    订阅 /cmd_vel  geometry_msgs/Twist · /cmd_vel_nav geometry_msgs/TwistStamped "
+            "→ 推理网关 2s 人工覆盖\n"
+            "    断线行为：自动重连（3 秒间隔，无限次）；连接/断开/重连均有带时间戳日志")
 
         self.connect_websocket()
 
@@ -92,15 +106,23 @@ class EmbodiedRos2Bridge(Node):
     def ws_thread(self):
         while True:
             self.ws.run_forever()
-            self.get_logger().error("❌ 未连接到推理网关，3秒后重试...")
+            self.reconnect_attempts += 1
+            self.get_logger().error(
+                f"❌ 与推理网关连接中断/失败，3 秒后发起第 {self.reconnect_attempts} 次自动重连 "
+                f"→ {GATEWAY_WS_URL}")
             time.sleep(3)
 
     def on_open(self, ws):
-        self.get_logger().info("✅ 已成功连接到推理网关！")
+        self.get_logger().info(
+            f"✅ 已成功连接到推理网关！（生命周期：CONNECTED，此前重连尝试 "
+            f"{self.reconnect_attempts} 次）")
+        self.reconnect_attempts = 0
         self.last_step = -1
 
     def on_close(self, ws, close_status_code, close_msg):
-        self.get_logger().warn("⚠️ WebSocket 连接已断开！")
+        self.get_logger().warn(
+            f"⚠️ WebSocket 连接已断开！（生命周期：DISCONNECTED，code={close_status_code}）；"
+            "将自动重连，无需手动重启")
 
     # ------------------------------------------------------------------
     # 控制下行：/cmd_vel → 人工覆盖指令（推理网关侧负责换算到归一化动作并抢占 RL）

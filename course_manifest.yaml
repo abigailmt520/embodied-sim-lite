@@ -11,7 +11,7 @@ course:
   release_line: release/v1.1              # 现钉版对应的发布分支（热修只入此线，课程不自动跟随）
   contract:
     path: docs/teaching_api.md
-    version: 1.0.0                        # 教学接口契约（语义化版本；改契约须升主版本并附迁移说明）
+    version: 1.1.0                        # 教学接口契约（语义化版本）；v1.1.0＝FORGE-002 MINOR：slip 开关＋桥接日志，默认关闭、旧输出不变
 
 paper:
   jsjjy_tag: paper-jsjjy-2026             # 《计算机教育》论文复现锚（= paper-sync-v1.1 HEAD）

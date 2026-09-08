@@ -1,12 +1,12 @@
 # docs/teaching_api.md — 教学接口契约（Teaching API Contract）
 
-契约版本：v1.0.0 ｜ 2026-09-08（CSO-028 平台保护令·任务1）｜ 适用代码点：tag `course-2026A`（bc8fa50）
+契约版本：v1.1.0 ｜ 2026-09-08（v1.0.0＝CSO-028 任务1；**v1.1.0＝FORGE-002 任务七重做，MINOR：向后兼容新增，默认关闭，旧输出不变**）｜ 基线代码点：tag `course-2026A`（bc8fa50）
 本契约 **= 现状快照**：只成文当前代码的实际行为，不含任何计划、愿望或建议。与代码不符处以代码为准，并须以 PATCH 修订本文件。版本规则见 §0 与 ITERATION.md §5。
 
 ## 0. 版本规则（语义化版本）
 
 - **MAJOR**：任一契约面（入口命令与参数 / 话题与 QoS / 真值接口 / 自检输出格式 / 指标定义）发生不兼容变更。须附迁移说明与兼容垫片，并由主理人下令后触发课程迁移。
-- **MINOR**：向后兼容的新增（新入口、新可选参数、新字段），默认关闭或不改变旧输出。
+- **MINOR**：向后兼容的新增（新入口、新可选参数、新字段），默认关闭或不改变旧输出。**v1.1.0 即此类**：新增 `--slip`/`SLIP` 可选开关与桥接日志；开关关闭态下 `/health`、启动 stdout 与 golden 15 件均逐字节不变（FORGE-002 已实测）。
 - **PATCH**：文档修正、与实现对齐，零行为变化。
 - 版本唯一源＝本文件头部「契约版本」；`course_manifest.yaml` 的 `course.contract.version` 须与之一致（CI 门2 校验）。
 
@@ -14,7 +14,7 @@
 
 | 入口 | 命令 | 参数（默认值） | 产物 | 现状说明 |
 |---|---|---|---|---|
-| 默认演示网关（系统唯一入口） | `python inference_server.py` | 无；端口固定 8000，host 0.0.0.0 | HTTP :8000（§2） | 60 Hz 心跳；PPO 常驻自走；回合终止即 `reset()`（障碍重摆）；env 未播种（演示态不可复现） |
+| 默认演示网关（系统唯一入口） | `python inference_server.py` | **`--slip <float>` 或环境变量 `SLIP`（v1.1.0 新增，可选；不指定＝开关关闭，行为与 v1.0.0 逐字节一致）**；端口固定 8000，host 0.0.0.0 | HTTP :8000（§2） | 60 Hz 心跳；PPO 常驻自走；回合终止即 `reset()`（障碍重摆）；env 未播种（演示态不可复现）。`--slip 0` ⇒ 里程计逐位退化为真值（odom ≡ truth），审计「退化检验」对照档 |
 | 静态世界导航网关 | `python nav_gateway.py` | `--simdir <本脚本目录>` `--seed 42` `--port 8000` `--window 2.0` `--slip 0.0` | HTTP :port（§2；无前端页） | 10 Hz＝实时；世界一次生成永不 reset；无 PPO，覆盖窗外零动作 |
 | 三门自检 | `python audit/run_action1.py` | 无 | `audit/sessions/{healthy,injected_1-A_truth_copy,injected_1-B_seq_freeze,injected_1-C_stall_running}.json`、`audit/eval_episodes.csv`、`audit/eval_metrics.png`、`audit/eval_summary.json`；stdout 报告（§5.4） | 退出码恒 0，判定只看 stdout ✅/❌ 行 |
 | 红/绿对照矩阵图 | `python audit/make_audit_figure.py [--paper]` | `--paper` 300 dpi 论文版 | `audit/audit_redgreen_matrix.png` / `_paper.png` | 读取 `audit/sessions/*.json` 重新真实运行审计；需先跑自检 |
@@ -33,7 +33,7 @@
 ### 2.1 HTTP
 - `GET /` → 内联 Three.js 孪生前端（`HTMLResponse`）；`?screenshot=1` 论文截图模式（仅 `inference_server.py`；`nav_gateway.py` 无前端页）。
 - `GET /health`
-  - `inference_server.py`：`{"service":"Embodied-SimLite Inference Gateway","tick_hz":60.0,"clients":<int>,"ws_endpoint":"/ws"}`
+  - `inference_server.py`：`{"service":"Embodied-SimLite Inference Gateway","tick_hz":60.0,"clients":<int>,"ws_endpoint":"/ws"}`；**v1.1.0：仅当 slip 开关打开（给了 `--slip` 或 `SLIP`）时额外含 `"slip": <float>`；开关关闭时响应与 v1.0.0 逐字节相同**
   - `nav_gateway.py`：`{"mode":"nav-static","seed":<int>,"slip":<float>,"tick_hz":10.0,"tick_n":<int>,"uptime_s":<float>,"robot_truth":{"x","y","theta_deg"},"terminated_events":<int>,"clients":<int>}`
 
 ### 2.2 WebSocket `/ws`（前端与 ROS 2 桥接共用同一端点）
@@ -65,6 +65,8 @@
 | 广播 | tf | — | — | `odom→base_footprint`（z=0.15）、`base_footprint→base_link`（恒等）、`base_footprint→laser_frame`（z=0.5） | 时间戳＝ROS 墙钟；全链路 `use_sim_time=false` |
 | 订阅 | `/cmd_vel` | `geometry_msgs/Twist` | depth 10 | — | `linear.x`、`angular.z` → 上行 `cmd_vel` |
 | 订阅 | `/cmd_vel_nav` | `geometry_msgs/TwistStamped` | depth 10 | — | 同上（Jazzy Nav2 默认输出） |
+
+**v1.1.0 新增（仅日志，话题/QoS/frame 与 v1.0.0 完全不变）**：节点启动即打印**桥接契约声明**（先声明后发布：话题·类型·QoS·frame·断线行为概要，供 `ros2 topic info --verbose` 逐条核实）；连接/断开/重连打印**生命周期日志**（CONNECTED／DISCONNECTED＋close code／第 N 次自动重连）。
 
 ## 4. 真值接口（`embodied_env.EmbodiedNavEnv`，gymnasium id `EmbodiedNav-v0`）
 
