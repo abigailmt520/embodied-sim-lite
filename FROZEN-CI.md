@@ -75,4 +75,4 @@
 
 - 2026-09-08 基准机本地 `ready_check --all` 首跑：门1 🟢（4 项）｜门2 🟢（11 项：三点一致、契约 v1.0.0、golden 15 件完整、A/B 15 件逐字节、golden strict 逐字节）｜门3 🟢（26 项：HASHES.lock 22 条不变、子集 A 14×4 等价、子集 B 数值逐位、Table 2 93/93、压测 50、S5 派生逐字节、D4 四列 0/120、PPO 21/3/1、ATE 0.831123）。
   - 守卫脚本自身两处 bug 由首跑红灯揪出并修复后重录 golden：stdout 归一化未覆盖 macOS `/var`→`/private/var` realpath；HASHES.lock 锚点行解析列偏移。红测能红，门为真。
-- CI 首跑（ubuntu-24.04，x86_64）：见后续追加。
+- CI 首跑（GitHub Actions run 34212854586，ubuntu-24.04 x86_64：AMD EPYC 7763 / Intel Xeon 8573C；py 3.13，torch 2.14.0+cpu，numpy 2.5.3，matplotlib 3.11.1）：三 job 全部 success，各约 1 分钟。门2：三点一致、契约 v1.0.0、golden 15 件清单完整、**A/B 15 件逐字节一致**；golden 对照（report）：一致 9 / 不一致 6——不一致件＝4 份 session JSON（torch 跨 BLAS 浮点末位进入位姿小数）＋2 张 PNG（matplotlib 3.11.1 vs 3.11.0 编码差异）；eval_episodes.csv / eval_summary.json / 三份 stdout / fork_before·after.csv / map_gt.pgm·yaml 跨平台全部一致 → PPO 计数 21/3/1、均步 80.8、ATE 0.831123 跨平台不变。门3：26 项全 PASS（PPO 计数 report 模式一致）。结论：`bench-strict` 策略成立——同机逐字节强制、异机 A/B 强制＋数值一致；若要跨机逐字节，须锁定 torch/numpy/matplotlib 版本与 BLAS 实现，留待 T0 施工令决定，本令不改。
