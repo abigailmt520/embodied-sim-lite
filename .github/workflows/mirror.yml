@@ -1,0 +1,18 @@
+# 双远端引用漂移巡检（CSO-028-R1 裁定③）：Gitee 无 ruleset/Actions，镜像纪律靠这杆秤。
+# 每日定时 + 手动 + master 推送后各跑一次；漂移即红（非 merge 必需检查，属报警）。
+name: mirror-check
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+  push:
+    branches: [master]
+jobs:
+  mirror-check:
+    name: mirror-check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: 双远端受保护 tag / 关键分支哈希比对
+        run: bash tools/mirror_check.sh

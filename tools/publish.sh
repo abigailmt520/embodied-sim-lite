@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 公开仓推送的唯一入口：自测 → 待推引用全树审计 → 推送。任一环节非零即停，不推。
+# 公开仓推送的唯一入口：自测 → 待推引用全树审计 → 推送 → 双远端漂移巡检。任一环节非零即停，不推。
 # 用法：tools/publish.sh [--tag NAME ...] [--allow-frozen] [branch] [remote ...]
 #   --tag NAME 只推送指定 tag（可重复），且 NAME 须匹配前缀白名单 paper*-*、p5-* 或 course-*，其余拒推（exit 4）；
 #   不再提供 --tags（推送全部本地 tag 曾把无关 tag 带入审计并拒推）。
@@ -33,4 +33,11 @@ status=0
 for r in $REMOTES; do
   git push "$r" "$BRANCH:$BRANCH" $TAGS || { echo "publish: 推送 $r 失败" >&2; status=1; }   # $TAGS 为 refs/tags/NAME 列表，逐个显式推送
 done
+# [4/4] 双远端漂移巡检（CSO-028-R1 裁定③）：只在推送到全部远端时有意义；单远端推送后本就预期不一致，跳过
+if [ "$(echo $REMOTES | wc -w)" -ge 2 ] && [ "$status" = 0 ]; then
+  echo "== [4/4] 双远端漂移巡检 =="
+  bash tools/mirror_check.sh || { echo "publish: 双远端受保护引用漂移，需人工核查" >&2; status=1; }
+else
+  echo "== [4/4] 单远端推送，跳过双远端巡检（完成双推后请跑 tools/mirror_check.sh）=="
+fi
 exit $status

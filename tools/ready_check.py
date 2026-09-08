@@ -37,6 +37,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = ROOT / "course_manifest.yaml"
+DUMP_DIR = None  # --dump DIR：把 HEAD 归一化产物落盘（CI 上传，供跨平台差异度量）
 LOCK_PATH = ROOT / "artifacts" / "HASHES.lock"
 FROZEN_SUBSET_PATH = ROOT / "artifacts" / "eval" / "ci_frozen_subset.json"
 S5_SCRIPT = ROOT / "artifacts" / "eval" / "derive_s5_attribution.py"
@@ -144,6 +145,21 @@ def normalize(data: bytes, rules, ctx) -> bytes:
             for k in ctx.get("drop_keys", []):
                 obj.pop(k, None)
             data = (json.dumps(obj, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+        elif rule == "json_round":
+            # 定点化（CSO-028-R1 裁定②）：浮点统一舍入到 round_digits 位，跨 BLAS 末位差归零；
+            # 施加在归一化层而非旧入口写出时，保证 course tag 旧入口本身逐字节不动（A/B 门仍对原始产物成立）
+            nd = int(ctx.get("round_digits", 6))
+            def _rnd(v):
+                if isinstance(v, float):
+                    r = round(v, nd)
+                    return 0.0 if r == 0 else r          # 消 -0.0
+                if isinstance(v, list):
+                    return [_rnd(x) for x in v]
+                if isinstance(v, dict):
+                    return {k: _rnd(x) for k, x in v.items()}
+                return v
+            obj = _rnd(json.loads(data.decode("utf-8")))
+            data = (json.dumps(obj, ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8")
         elif rule == "strip_root":
             text = data.decode("utf-8", "replace")
             for path, tag in ctx.get("paths", []):
@@ -173,7 +189,8 @@ def run_entry(tree: Path, entry, env) -> dict:
             if not src.exists():
                 raise RuntimeError(f"入口 {entry['id']} 未产出 {o['path']}")
             key = o.get("as", o["path"])
-            outs[key] = normalize(src.read_bytes(), o.get("normalize"), {**ctx, "drop_keys": o.get("drop_keys", [])})
+            outs[key] = normalize(src.read_bytes(), o.get("normalize"),
+                                  {**ctx, "drop_keys": o.get("drop_keys", []), "round_digits": o.get("round_digits", 6)})
         so = entry.get("stdout")
         if so:
             outs[so["path"]] = normalize(r.stdout.encode("utf-8"), so.get("normalize"), ctx)
@@ -292,6 +309,10 @@ def gate_course(manifest, cache):
         rep.fail(f"入口复跑失败：{e}")
         return rep
     cache["head_outputs"] = outs_b
+    if DUMP_DIR:
+        for k, v in outs_b.items():
+            dp = Path(DUMP_DIR) / k; dp.parent.mkdir(parents=True, exist_ok=True); dp.write_bytes(v)
+        rep.info(f"HEAD 归一化产物已落盘 {len(outs_b)} 件 → {DUMP_DIR}")
     rep.check(set(outs_a) == set(outs_b), f"A/B 产物集合一致（{len(outs_b)} 件）")
     diff = [k for k in sorted(outs_b) if outs_a.get(k) != outs_b.get(k)]
     rep.check(not diff, f"A/B 逐字节一致：HEAD 旧入口产物 = course tag 产物（{len(outs_b)} 件）", f"A/B 不一致：{diff}")
@@ -310,16 +331,19 @@ def gate_course(manifest, cache):
 
 # ---------------------------------------------------------------- 门3
 def parse_lock():
-    anchor = None
-    entries = {}
+    """返回 (anchor(tag, commit), {path: sha256}, append_only:set)。
+    `# append-only: p1 p2 …` 指令行列出的路径按「锚点内容为当前内容前缀」校验（台账/索引只增不改），其余按哈希不变。"""
+    anchor, entries, append_only = None, {}, set()
     for line in LOCK_PATH.read_text(encoding="utf-8").splitlines():
         if line.startswith("# anchor:"):
             parts = line.split()          # "# anchor: tag <name> <sha>"
             anchor = (parts[3], parts[4])
+        elif line.startswith("# append-only:"):
+            append_only.update(line.split(":", 1)[1].split())
         elif line.strip() and not line.startswith("#"):
             h, p = line.split("  ", 1)
             entries[p] = h
-    return anchor, entries
+    return anchor, entries, append_only
 
 
 NEW_BENCH_RE = re.compile(r"^artifacts/benchmark/v(?!1(?:[^0-9]|$))\d+[A-Za-z0-9._-]*/")
@@ -330,13 +354,25 @@ def gate_paper(manifest, cache):
     p = manifest["paper"]
     # 1) HASHES.lock
     if rep.check(LOCK_PATH.exists(), "artifacts/HASHES.lock 存在", "artifacts/HASHES.lock 缺失（--lock-artifacts）"):
-        anchor, locked = parse_lock()
+        anchor, locked, append_only = parse_lock()
         tag_commit = rev(f"{p['p4_tag']}^{{commit}}")
         rep.check(anchor and anchor[0] == p["p4_tag"] and anchor[1] == tag_commit,
                   f"锁锚点 = tag {p['p4_tag']} @ {tag_commit[:7] if tag_commit else '?'}",
                   f"锁锚点 {anchor} ≠ tag {p['p4_tag']} @ {tag_commit}")
-        changed = [rel for rel, h in locked.items() if not (ROOT / rel).exists() or sha256_file(ROOT / rel) != h]
-        rep.check(not changed, f"历史路径 {len(locked)} 件哈希不变（只增不改）", f"历史路径被改/删：{changed}")
+        changed, not_prefix = [], []
+        for rel, h in locked.items():
+            f = ROOT / rel
+            if not f.exists():
+                changed.append(rel); continue
+            if rel in append_only:
+                base = sh(["git", "cat-file", "-p", f"{anchor[1]}:{rel}"], binary=True).stdout
+                if not f.read_bytes().startswith(base):
+                    not_prefix.append(rel)
+            elif sha256_file(f) != h:
+                changed.append(rel)
+        n_frozen = len(locked) - len(append_only)
+        rep.check(not changed, f"冻结路径 {n_frozen} 件哈希不变", f"冻结路径被改/删：{changed}")
+        rep.check(not not_prefix, f"只增路径 {len(append_only)} 件以锚点内容为前缀（{sorted(append_only)}）", f"只增路径被改写/删行：{not_prefix}")
         tracked = sh(["git", "ls-files", "--", "artifacts"]).stdout.split()
         new = [t for t in tracked if t not in locked]
         bad_new = [t for t in new if t.startswith("artifacts/benchmark/") and not NEW_BENCH_RE.match(t)]
@@ -439,10 +475,15 @@ def record_golden(manifest, force):
         sys.exit(f"golden 目录已存在（{gdir}），拒绝覆盖；确需重录加 --force（须同时在 FROZEN-CI.md 追加记录）")
     tag = manifest["course"]["tag"]
     env = run_env(manifest)
+    rec_path = gdir / "RECORD.json"
+    prev_json = rec_path.read_text(encoding="utf-8") if rec_path.exists() else None
     with TagWorktree(tag) as wt:
         outs = run_all_entries(wt, manifest, env)
     if gdir.exists():
         shutil.rmtree(gdir)
+    gdir.mkdir(parents=True, exist_ok=True)
+    if prev_json is not None:
+        rec_path.write_text(prev_json, encoding="utf-8")   # 先放回旧 RECORD 供 history 续写
     for rel, data in outs.items():
         p = gdir / rel
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -451,9 +492,20 @@ def record_golden(manifest, force):
              "# 格式：sha256  相对路径（归一化后字节；归一化规则见 course_manifest.yaml entries[].outputs[].normalize）"]
     lines += [f"{sha256_bytes(outs[k])}  {k}" for k in sorted(outs)]
     (gdir / "MANIFEST.sha256").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    prev = json.loads(rec_path.read_text(encoding="utf-8")) if rec_path.exists() else {}
+    history = prev.get("history", [])
+    reason = os.environ.get("GOLDEN_RERECORD_REASON")
+    if force and not reason:
+        sys.exit("重录须给出原因：环境变量 GOLDEN_RERECORD_REASON=…（入 RECORD.json history）")
+    if force:
+        history.append({"at": datetime.datetime.now().astimezone().isoformat(timespec="seconds"), "reason": reason,
+                        "prev_recorded": prev.get("recorded"), "prev_files": prev.get("files")})
     rec = {"tag": tag, "commit": rev(tag + "^{commit}"), "recorded": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
            "fingerprint": machine_fingerprint(), "env": manifest["golden"].get("env") or {},
-           "entries": [e["id"] for e in manifest["entries"]], "files": len(outs)}
+           "entries": [e["id"] for e in manifest["entries"]], "files": len(outs),
+           "normalization": {e["id"]: [(o.get("as", o["path"]), o.get("normalize"), o.get("round_digits")) for o in e.get("outputs", []) if o.get("normalize")]
+                             for e in manifest["entries"]},
+           "history": history}
     (gdir / "RECORD.json").write_text(json.dumps(rec, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     print(f"golden 已录制：{len(outs)} 件 → {gdir}（指纹 {rec['fingerprint']['hw_model']} / torch {rec['fingerprint']['torch']}）")
 
@@ -484,7 +536,10 @@ def lock_artifacts(manifest, append):
         body = LOCK_PATH.read_text(encoding="utf-8").rstrip("\n") + "\n"
         body += f"# appended {datetime.date.today().isoformat()} @ {rev('HEAD')[:7]}\n"
     else:
-        body = f"# anchor: tag {tag} {commit}\n# artifacts 只增不改守卫：下列历史路径的内容哈希不得改变；新增文件另起新路径（benchmark/ 下须 v2+ 新目录）\n"
+        ao = " ".join(manifest["paper"].get("append_only", []))
+        body = (f"# anchor: tag {tag} {commit}\n"
+                f"# artifacts 只增不改守卫：下列历史路径的内容哈希不得改变；新增文件另起新路径（benchmark/ 下须 v2+ 新目录）\n"
+                f"# append-only: {ao}\n")
     body += "".join(f"{h}  {p}\n" for p, h in sorted(new.items()))
     LOCK_PATH.write_text(body, encoding="utf-8")
     print(f"HASHES.lock：{'追加' if append else '生成'} {len(new)} 条（锚点 {tag} @ {commit[:7]}）")
@@ -512,7 +567,10 @@ def main():
     ap.add_argument("--write-frozen-subset", action="store_true")
     ap.add_argument("--append", action="store_true"); ap.add_argument("--force", action="store_true")
     ap.add_argument("--json", help="机器可读结果输出路径")
+    ap.add_argument("--dump", help="把 HEAD 归一化产物落盘到目录（CI 上传供跨平台差异度量）")
     a = ap.parse_args()
+    global DUMP_DIR
+    DUMP_DIR = a.dump
     manifest = load_manifest()
     if a.record_golden:
         return record_golden(manifest, a.force)

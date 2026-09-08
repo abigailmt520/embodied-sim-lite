@@ -19,6 +19,10 @@ paper:
   p4_commit: b83ec8c0838fbea2a4f9f0682e018c4fce023ef8
   artifacts_lock: artifacts/HASHES.lock   # artifacts 只增不改守卫
   frozen_subset: artifacts/eval/ci_frozen_subset.json
+  append_only:                            # 台账/索引类：只增不改＝以锚点内容为前缀（其余路径按哈希不变）
+    - artifacts/benchmark/FROZEN.md
+    - artifacts/ERRATA.md
+    - artifacts/README.md
 
 golden:
   dir: golden/course-2026A                # golden 基准输出集（course tag 下旧入口产物录制，归一化后字节 + 哈希清单）
@@ -51,10 +55,10 @@ entries:
       - {path: audit/eval_episodes.csv}
       - {path: audit/eval_summary.json, normalize: [json_drop_keys], drop_keys: [generated_at]}
       - {path: audit/eval_metrics.png}
-      - {path: audit/sessions/healthy.json}
-      - {path: audit/sessions/injected_1-A_truth_copy.json}
-      - {path: audit/sessions/injected_1-B_seq_freeze.json}
-      - {path: audit/sessions/injected_1-C_stall_running.json}
+      - {path: audit/sessions/healthy.json, normalize: [json_round], round_digits: 6}   # 定点化（CSO-028-R1 裁定②）
+      - {path: audit/sessions/injected_1-A_truth_copy.json, normalize: [json_round], round_digits: 6}   # 定点化（CSO-028-R1 裁定②）
+      - {path: audit/sessions/injected_1-B_seq_freeze.json, normalize: [json_round], round_digits: 6}   # 定点化（CSO-028-R1 裁定②）
+      - {path: audit/sessions/injected_1-C_stall_running.json, normalize: [json_round], round_digits: 6}   # 定点化（CSO-028-R1 裁定②）
     stdout: {path: audit/run_action1.stdout.txt, normalize: [strip_root]}
   - id: fork
     desc: 真分叉记录器（before/after 500 步开环定曲率）

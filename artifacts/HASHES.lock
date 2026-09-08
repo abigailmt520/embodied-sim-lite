@@ -1,5 +1,6 @@
 # anchor: tag paper-p4-v1 b83ec8c0838fbea2a4f9f0682e018c4fce023ef8
 # artifacts 只增不改守卫：下列历史路径的内容哈希不得改变；新增文件另起新路径（benchmark/ 下须 v2+ 新目录）
+# append-only: artifacts/benchmark/FROZEN.md artifacts/ERRATA.md artifacts/README.md
 345446f563a3b3deb002504732cf72204952104e76c62385ba10bfa89847f508  artifacts/ERRATA.md
 068666247065ecb0c9736307c0c505bb90da65e9addbf899a267dd116936b08f  artifacts/README.md
 9d2a6a82f623aa2446a5ae77c4b95c06d3d29da90b50a1089e3be9f8099935e1  artifacts/benchmark/FROZEN.md

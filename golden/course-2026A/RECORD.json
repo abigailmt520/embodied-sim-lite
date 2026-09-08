@@ -1,7 +1,7 @@
 {
   "tag": "course-2026A",
   "commit": "bc8fa5018592c0efdadc3c471be16f46dc422dc1",
-  "recorded": "2026-09-08T02:55:25-07:00",
+  "recorded": "2026-09-08T03:58:40-07:00",
   "fingerprint": {
     "system": "Darwin",
     "machine": "arm64",
@@ -24,5 +24,61 @@
     "fork",
     "gt_map"
   ],
-  "files": 15
+  "files": 15,
+  "normalization": {
+    "selfcheck3": [
+      [
+        "audit/eval_summary.json",
+        [
+          "json_drop_keys"
+        ],
+        null
+      ],
+      [
+        "audit/sessions/healthy.json",
+        [
+          "json_round"
+        ],
+        6
+      ],
+      [
+        "audit/sessions/injected_1-A_truth_copy.json",
+        [
+          "json_round"
+        ],
+        6
+      ],
+      [
+        "audit/sessions/injected_1-B_seq_freeze.json",
+        [
+          "json_round"
+        ],
+        6
+      ],
+      [
+        "audit/sessions/injected_1-C_stall_running.json",
+        [
+          "json_round"
+        ],
+        6
+      ]
+    ],
+    "fork": [],
+    "gt_map": []
+  },
+  "history": [
+    {
+      "at": "2026-09-08T03:02:00-07:00（约：首录 02:49 → 本地三门首跑揪出守卫 bug → 修复后即重录，早于 03:04 的本地三绿）",
+      "reason": "守卫脚本自身两处 bug 修复后重录：stdout 归一化未覆盖 macOS /var→/private/var realpath；HASHES.lock 锚点行解析列偏移（本地首跑红灯揪出）",
+      "prev_recorded": "2026-09-08T02:49:21-07:00",
+      "prev_files": 15,
+      "backfilled": true
+    },
+    {
+      "at": "2026-09-08T03:58:40-07:00",
+      "reason": "CSO-028-R1 裁定②：session JSON 定点化归一（json_round 6 位，消跨 BLAS 浮点末位差）＋ CI 依赖钉版 requirements-ci.txt；目标跨平台 golden 15/15",
+      "prev_recorded": "2026-09-08T02:55:25-07:00",
+      "prev_files": 15
+    }
+  ]
 }

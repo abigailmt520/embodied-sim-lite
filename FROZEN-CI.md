@@ -22,8 +22,8 @@
 | 2.4 | A/B 同机复跑 | manifest `entries` 三入口在 course tag 临时 worktree（A）与 HEAD 树（B）各跑一遍，归一化后 **逐字节相等**；任何机器强制 |
 | 2.5 | golden 对照 | 策略 `bench-strict`：本机指纹（system/machine/hw_model/python/numpy/torch/matplotlib）＝`RECORD.json` 指纹 → 逐字节强制；异机 → report（打印一致/不一致清单，不判红）。环境变量 `READY_CHECK_GOLDEN=strict|report` 可覆盖 |
 
-- 2.5 的理由：PPO 推理经 torch 浮点，跨 BLAS 实现（Accelerate / OpenBLAS / MKL）末位可能不同并传入 session JSON；跨机等价性由 2.4 的 A/B 保证；跨机逐字节能否成立由 CI 首跑实测后决定是否收紧（§6 记录）。
-- 归一化规则（manifest `entries[].outputs[].normalize`）：`audit/eval_summary.json` 去 `generated_at` 后 `json.dumps(indent=2, ensure_ascii=False)`；stdout 中树根替换为 `<ROOT>`、临时目录替换为 `<TMP>`；其余文件零归一化。
+- 2.5 的理由：PPO 推理经 torch 浮点，跨 BLAS 实现（Accelerate / OpenBLAS / MKL）末位可能不同并传入 session JSON；跨机等价性由 2.4 的 A/B 保证。**收敛令（CSO-028-R1 裁定②）**：CI 依赖钉版 `requirements-ci.txt`（与基准机逐版本一致，消 PNG 差异）＋ session JSON 定点化（消浮点尾差），目标 **golden 15/15 跨平台**；达成后策略由 `bench-strict` 收紧为 `strict`；实在收不掉的极少数逐件在 §6 列明豁免理由——豁免清单不得静默膨胀。
+- 归一化规则（manifest `entries[].outputs[].normalize`）：`audit/eval_summary.json` 去 `generated_at` 后 `json.dumps(indent=2, ensure_ascii=False)`；**四份 session JSON 定点化 `json_round`（浮点统一舍入 6 位、`-0.0`→`0.0`、紧凑序列化）——CSO-028-R1 裁定②，施加在归一化层而非旧入口写出时，使 course tag 旧入口本身逐字节不动（A/B 门仍对原始产物成立）**；stdout 中树根（含 realpath 形）替换为 `<ROOT>`、临时目录替换为 `<TMP>`；其余文件零归一化。定点化的残余风险：跨平台末位差落在舍入边界上的值仍可能翻转（概率≈末位差/1e-6·值数），如发生按已知成因豁免并记本节。
 - 运行环境：`OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONHASHSEED=0 MPLBACKEND=Agg`（录制与复跑同）。
 - 种子封存：manifest `seeds`（run_action1 SEED_SESSION 11 / SEED_EVAL 100..124 / N_LIVE 240 / N_DISCONNECT 15；record_fork SEED 7 / 500 步 / 动作 [0.6,0.25]；make_gt_map seed 42；env SLIP_FACTOR 0.05）。
 - 未纳入 golden 的入口及原因：manifest `excluded_entries`（长驻服务、需 ROS 2/Chrome、非确定输出）。
@@ -32,7 +32,7 @@
 
 | # | 检查 | 判据 / 容差 |
 |---|---|---|
-| 3.1 | artifacts 只增不改 | `artifacts/HASHES.lock`（锚 `paper-p4-v1` @ `b83ec8c0838fbea2a4f9f0682e018c4fce023ef8`，22 条）每条路径存在且 sha256 相等；新增允许；`artifacts/benchmark/` 下新增须落 `artifacts/benchmark/v<N≥2>…/` 新目录（新基准＝新目录＋新版本号） |
+| 3.1 | artifacts 只增不改 | `artifacts/HASHES.lock`（锚 `paper-p4-v1` @ `b83ec8c0838fbea2a4f9f0682e018c4fce023ef8`，22 条）：**冻结路径**（数据/脚本/报告，19 条）sha256 不变；**只增路径**（台账/索引：`benchmark/FROZEN.md`、`ERRATA.md`、`README.md`，`# append-only:` 指令行）当前内容须以锚点 commit 内容为前缀（追加合法、改写/删行判红）；新增允许；`artifacts/benchmark/` 下新增须落 `artifacts/benchmark/v<N≥2>…/` 新目录（新基准＝新目录＋新版本号）。两种语义的依据：FROZEN.md 自身家规为「只增不删」，与「哈希不变」按文件性质分工 |
 | 3.2a | 冻结子集 A（字段等价） | `artifacts/eval/ci_frozen_subset.json`：S5 且 `expected_action=reject` 的 **14 条**（只引 id）× 四模型日志（1.5B / 3B / Fallback 2 / Teacher）：`parsed.action`、`parsed.targets`（列表、顺序敏感）、`system_action`、`score` 逐条精确相等 |
 | 3.2b | 冻结子集 B（数值逐位） | 四模型 n=120；score_sum **72 / 88 / 116 / 117**；分层 score 和：1.5B {S1 24,S2 6,S3 20,S4 20,S5 2}，3B {24,14,21,13,16}，Fallback 2 {24,23,23,22,24}，Teacher {24,23,23,23,24}；Table 2 n=93 reached=93；压测第四轮 n=50、`result` 计数 {not_reached: 50}（该轮判据为 0 崩 0 僵，`result` 字段按日志原值冻结） |
 | 3.3 | S5 派生脚本 | `derive_s5_attribution.py` 内置断言（Table 5 三行四列 + §5.1 事实）exit 0；输出与 `artifacts/eval/s5_attribution.md` 逐字节相等（sha256 `00f5c3ad…`） |
@@ -40,10 +40,11 @@
 | 3.5 | 平台论文数字 | PPO 25 回合 `{n 25, success 21, collision 3, timeout 1, avg_steps_success 80.8}`（＝论文 84%/12%/4%、约 81 步；受 2.5 golden 策略：同机强制、异机 report）；真分叉 `{ATE_RMSE 0.831123, final_err 1.532276, max_err 1.54648, final_yaw_drift_deg −53.6709}`（纯 numpy，任何机器强制） |
 
 - 容差：**零容差**——字符串/列表精确相等，整数精确相等，浮点按脚本输出位数（6 位 / 4 位）精确相等。
-- 复跑口径：**派生链复跑**（冻结脱敏日志 → 论文数字，零 API 调用）。LLM 推理本身不在 CI 复跑（需密钥/GPU，云端模型非确定）；其可复现性由 `artifacts/benchmark/FROZEN.md` 的温度闸与正典登记承载。
+- 复跑口径：**派生链复跑**（冻结脱敏日志 → 论文数字，零 API 调用）。
+- **定位（CSO-028-R1 裁定④，设计而非妥协）**：CI 门3 的职责是守护「冻结证据 → 论文数字」推导链的完整性，防代码漂移悄改统计口径；LLM 真推理天然不可入 CI（2.5-pro 暗关闸是亲历教训，见 FROZEN.md「拍板型号更正追加」），其复跑属「复现审计」级事件，需要时由人工令执行。其可复现性由 `artifacts/benchmark/FROZEN.md` 的温度闸与正典登记承载。
 - 子集 A 与子集 B 的 id 集合、期望值由 `ready_check --write-frozen-subset` 于 2026-09-08 自四份日志生成（HEAD b83ec8c 工件）；改动＝新版本文件＋本节追加。
 
-## 4. golden 基准输出集清单（录制 2026-09-08，`course-2026A` @ bc8fa50，基准机 Mac14,9；15 件，归一化后 sha256）
+## 4. golden 基准输出集清单（录制 2026-09-08，`course-2026A` @ bc8fa50，基准机 Mac14,9；15 件，归一化后 sha256；**本表为 03:58 第三次录制（裁定② 定点化）**，前两次见 RECORD.json history）
 
 | 文件 | sha256 |
 |---|---|
@@ -51,10 +52,10 @@
 | audit/eval_metrics.png | `27a494b9e8e8bcc07d36b322c70ac0afabdbd97a6ae79074f2ceb524b9f3fe0f` |
 | audit/eval_summary.json（去 generated_at） | `f826bfd72ce54dbfde2a2618708dc7a3097d23184b3ce35e99b567438ec59ac4` |
 | audit/run_action1.stdout.txt | `17a30396c4d55e7bb2faa97096ed1814cf41393fa3f8b943585ed653d5c3731c` |
-| audit/sessions/healthy.json | `988c8d4cbfebf81b53b0bff544626964e0eeb8d82b6ee172b3ab35024f3a4db0` |
-| audit/sessions/injected_1-A_truth_copy.json | `dc50c8950f78d70cb6d72da1cda37e96ee732be92db0f0e3ee4bec2b7ea83ec7` |
-| audit/sessions/injected_1-B_seq_freeze.json | `3ab9afb3ebcb230492be0b7bdad98c1ec478bf6fdbef8992d85ae919421b4aab` |
-| audit/sessions/injected_1-C_stall_running.json | `e6944b87b3fbfc5394d28972f5bbd720ba0a9e6cce7293809166b5b1e477672a` |
+| audit/sessions/healthy.json（json_round 6） | `0465e05a24c9ff85598e29c9fac73a9987557deee3d42cab39225b6e6ec5b124` |
+| audit/sessions/injected_1-A_truth_copy.json（json_round 6） | `ed4b6d67a28bf070600fb802494c97a2b060b871e87ba403fe71b2c629c76246` |
+| audit/sessions/injected_1-B_seq_freeze.json（json_round 6） | `ba6173011f82c94525a5da6764a10b0f888b46df2252718112fb2f242b688282` |
+| audit/sessions/injected_1-C_stall_running.json（json_round 6） | `f1a3b0bfe989c0c2eb38aa99db0cb2482955c6215b57a4a9c462685ac463d37e` |
 | diagnostics/fork_after.csv | `26bb035df8441528f474282946a75f2add811be483a2ca2f78af01f1e65d91b3` |
 | diagnostics/fork_before.csv | `913841b5b50b8aae89b3764e8e5620d09aa1d48833a7d0661fd163a926557e69` |
 | diagnostics/fork_error_curve.png | `e25a37b13a18f5c3d783fdb43156a87831076fcd9f0b630b03135c76ab218b11` |
@@ -76,3 +77,7 @@
 - 2026-09-08 基准机本地 `ready_check --all` 首跑：门1 🟢（4 项）｜门2 🟢（11 项：三点一致、契约 v1.0.0、golden 15 件完整、A/B 15 件逐字节、golden strict 逐字节）｜门3 🟢（26 项：HASHES.lock 22 条不变、子集 A 14×4 等价、子集 B 数值逐位、Table 2 93/93、压测 50、S5 派生逐字节、D4 四列 0/120、PPO 21/3/1、ATE 0.831123）。
   - 守卫脚本自身两处 bug 由首跑红灯揪出并修复后重录 golden：stdout 归一化未覆盖 macOS `/var`→`/private/var` realpath；HASHES.lock 锚点行解析列偏移。红测能红，门为真。
 - CI 首跑（GitHub Actions run 34212854586，ubuntu-24.04 x86_64：AMD EPYC 7763 / Intel Xeon 8573C；py 3.13，torch 2.14.0+cpu，numpy 2.5.3，matplotlib 3.11.1）：三 job 全部 success，各约 1 分钟。门2：三点一致、契约 v1.0.0、golden 15 件清单完整、**A/B 15 件逐字节一致**；golden 对照（report）：一致 9 / 不一致 6——不一致件＝4 份 session JSON（torch 跨 BLAS 浮点末位进入位姿小数）＋2 张 PNG（matplotlib 3.11.1 vs 3.11.0 编码差异）；eval_episodes.csv / eval_summary.json / 三份 stdout / fork_before·after.csv / map_gt.pgm·yaml 跨平台全部一致 → PPO 计数 21/3/1、均步 80.8、ATE 0.831123 跨平台不变。门3：26 项全 PASS（PPO 计数 report 模式一致）。结论：`bench-strict` 策略成立——同机逐字节强制、异机 A/B 强制＋数值一致；若要跨机逐字节，须锁定 torch/numpy/matplotlib 版本与 BLAS 实现，留待 T0 施工令决定，本令不改。
+- 2026-09-08 **CSO-028-R1 裁定①核验（内容同一性）**：08-24 12:56 GMT 时点公开仓状态＝`5a62edf`（08-23 05:07 PDT 后无提交直至 09-05）。`HASHES.lock` 22 条对照 `5a62edf` 的 `artifacts/`：**冻结数据件 11 件逐字节同一**（`benchmark_v1_frozen.csv`、`disputes.md`、6 份脱敏日志、3 份报告；且与 README@5a62edf 声明哈希逐条一致）；**只增 2 件**（`FROZEN.md` +7390 B、`s4_datapack.md` +1867 B，B 以 A 为前缀）；**改写 1 件**（`README.md` 索引，2497→4530 B）；**新增 8 件**（ERRATA/派生脚本/D4 计数/支撑件/waypoints，均 09-05 CSO-022/023/025 令下产物）；**删除 0 件**。结论：冻结件全同 → **锚成立**；两日期＝两个事件：**08-24 12:56 GMT＝v1 投递**（5 页，`6248c06b…`，CMT 回下载逐字节同，DECISIONS 09-04 查1），**09-05 18:32 PDT＝r5 终稿经 CMT Edit Submission 提交**（6 页，`1ab1b676…`，随 09-04「Accept with revision suggestions」修订；09-06 正式录用）。发表稿＝r5，其 §5.1 按 CSO-025 勘误与 b83ec8c 的派生脚本输出一致，故复现面锚定 b83ec8c（内容为锚、日期为注）。
+- 2026-09-08 **CSO-028-R1 裁定③破坏性演练（GitHub 侧，诱饵规则）**：诱饵 tag `paper-drill-test`（落 `paper*-*` 面）试删→**GH013 Cannot delete this tag**；试改写→**GH013 Cannot update this protected ref / Cannot force-push**；master 空提交试直推→**GH006 3 of 3 required status checks are expected**。三项全拒；真锚全程未触。诱饵经「停用 ruleset→删→恢复」受控清理并核回（ruleset active、真锚 3/3 在）；该两步绕行为 GitHub 平台固有残余风险，对冲＝`tools/mirror_check.sh`。记录件：dream-os `50_product/platform/drill-2026-09-08/`。
+- 2026-09-08 **双远端巡检首跑抓到真漂移**：`paper1-final`、`paper2-final` 两 tag 与 `paper2-embodied-simlite` 冻结分支只在 Gitee（GitHub 镜像 08-09 建立时仅带 Paper-87 引用）。处置：两 tag 审计零命中→经 `publish.sh --tag` 镜像到 GitHub；分支 `e2b6474` 树命中凭证审计**误报**（`embodied_env.py:398` 注释词，DECISIONS 09-05 已判误报、词根收紧待「第三分支处置令」）→推送前硬门拒推，**挂账豁免**（`mirror_check.sh` WAIVED，只报不红），解除时删行并记本节。
+- 2026-09-08 golden 第三次录制（裁定②）：session 四件 `json_round` 6 位；`RECORD.json` 新增 `history`（补记 03:02 守卫修复重录、03:58 定点化重录）与 `normalization` 字段；CI 依赖钉版 `requirements-ci.txt`；gate2 新增 `--dump` 产物上传（`gate2-outputs`）供跨平台差异度量。**CI 复跑结果见后续追加。**
