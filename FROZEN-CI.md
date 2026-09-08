@@ -67,6 +67,19 @@
 | nav/map_gt.pgm | `16522b3b0853e2f6e130e4cf3a5c3e9bf80db583a38a8fd004005e12450c3985` |
 | nav/map_gt.yaml | `bdb0309814a2aa3753cb54af9940edda63188e742f6f0025b99d622fedb6bd2a` |
 
+### 冻结基准的单一真源声明（ONE-004 任务4，FORGE/DUTY 联席，2026-09-08）
+
+`artifacts/benchmark/{FROZEN.md, benchmark_v1_frozen.csv}` 在三处存有同一份内容：**真源＝论文线 dream-os `duty/papers/p4-iccwamtip/benchmark/`**；本仓 `artifacts/` 与教学仓 `_platform_tools/benchmark/` 均为**只读副本**。三处哈希应恒等（2026-09-08 核：`9d2a6a82…` / `10147765…`，8 件全一致）。**不做双向同步**——改动一律「改真源 → 重新发放」，且真源改动须先走预注册（`preregister` 技能）。
+
+覆盖分工（**FORGE 门3 只能管到本仓那一份**）：
+
+| 位置 | 由谁巡检 |
+|---|---|
+| 本仓 `artifacts/benchmark/*` | **门3 §3.1**（`HASHES.lock` 冻结路径哈希不变）——即上表所锁之值，与真源同一 |
+| 论文线真源 ＋ 教学仓副本 | dream-os `00_portfolio/tools/frozen_check.sh`（跨仓，本地运行） |
+
+**为什么不把跨仓比对写进门3**：CI 沙箱只 checkout 本仓，物理上看不到 dream-os 与教学仓（私有仓，且 CI 无凭证）。强行在门3 内做只会得到"文件不存在"的假绿或假红。故拆分：门3 守本仓副本（已覆盖），跨仓两跳由本地工具守，教学侧另有学期初核对纪律（其 `PROVENANCE.md` 只读标记）。
+
 - `nav/map_gt.pgm` 哈希＝`artifacts/benchmark/FROZEN.md`「修复包与作废注记 ｜ 2026-08-22」登记的世界定义 Mac 参考哈希 `16522b3b…`：课程冻结面与论文复现面指向**同一个世界**（seed 42）。
 - 库内已跟踪图件 `audit/eval_metrics.png`、`diagnostics/fork_error_curve.png` 与本次基准机再生逐字节一致（course tag 图件即在本机同环境生成）。
 - 录制机指纹、环境与入口清单：`golden/course-2026A/RECORD.json`。
