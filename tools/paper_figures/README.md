@@ -23,9 +23,11 @@ python tools/paper_figures/make_paper_figures.py                 # 默认输出�
 python tools/paper_figures/make_paper_figures.py --dpi 300       # 论文投稿建议 300
 python tools/paper_figures/make_paper_figures.py --outdir /tmp/figs
 python tools/paper_figures/make_paper_figures.py --eval-json audit/eval_summary.json
+python tools/paper_figures/make_paper_figures.py --audit-json audit_summary.json
 ```
 
 - `--eval-json`:传入 `audit/run_action1.py` 评测后导出的 `eval_summary.json`,图 4 将从平台实测数据生成,与论文数值形成可复现闭环;不提供时使用脚本内嵌的论文常量。
+- `--audit-json`:传入 `tools/audit_tools/analyze_packs.py` 汇总审计包后导出的 `audit_summary.json`,额外生成过程性证据系列 `figA_detection_table.png`(注入-检出结果表)、`figA_latency_dist.png`(检出时延分布)与 `figA_coding_dist.png`(证伪编码等级分布,**仅当 JSON 含人工双评 `coding` 键时生成**);均为黑白印刷友好,论文图号确定后统一改名。
 - 中文字体按平台自动探测(回退链:Noto Sans CJK SC → Source Han Sans SC → Microsoft YaHei → PingFang SC → Noto Sans CJK JP);找不到中文字体时打印警告,不报错。
 
 ## 数据来源与更新方式

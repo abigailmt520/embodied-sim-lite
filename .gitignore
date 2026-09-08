@@ -162,3 +162,9 @@ figs_out/
 # 内部工作笔记（不公开）
 task/
 old/
+# 审计运行产物:会话日志/截图/审计包/汇总(不入库)
+audit_sessions/
+audit_packs_selftest/
+audit_packs_fixture/
+audit_summary.json
+receipts.csv

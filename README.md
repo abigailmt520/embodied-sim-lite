@@ -127,6 +127,15 @@ python ros_bridge.py                     # 默认连 ws://127.0.0.1:8000/ws
 python make_gt_map.py --seed 42          # 真值占据栅格 map_gt.pgm/.yaml（map 帧=世界帧）
 python nav_gateway.py --seed 42          # 替代 ① 作真理源：世界恒定 / 10Hz 实时 / 无 PPO 自走
 #    动机与完整用法 → 见第 5.9 节；与 ① 勿同时运行（同占 8000 端口）
+
+# ⑨ 审计包校验与汇总（防篡改证据链；离线，不需服务端）
+python tools/audit_tools/verify_pack.py <审计包.zip 或目录>   # 哈希链 + MANIFEST + summary 复算 + 截图对账
+python tools/audit_tools/analyze_packs.py <包目录>            # 汇总 → audit_summary.json + receipts.csv
+python tools/audit_tools/selftest.py                          # 红测：合法包判绿、五种篡改面判红
+#    出图对接：make_paper_figures.py --audit-json audit_summary.json → figA_* 系列
+#    包格式、哈希链与指标口径 → 见 docs/audit_pack_spec.md
+#    注：产生审计包的平台实验模式入口尚未入仓（属课程冻结面改动，另行评审）；
+#        本节工具校验的是**已有的**审计包，可用 make_fixture_pack.py 离线造包自测。
 ```
 
 ---

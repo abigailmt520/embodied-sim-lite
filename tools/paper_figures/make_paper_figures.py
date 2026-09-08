@@ -24,6 +24,13 @@ v1_2 更正说明:
     --dpi        输出分辨率,默认 200(论文投稿建议 300)
     --eval-json  评测汇总 JSON(audit/run_action1.py 产出的 eval_summary.json);
                  提供时图 4 从实测数据生成,不提供时使用下方内嵌常量
+    --audit-json 过程性证据汇总 JSON(tools/audit_tools/analyze_packs.py 产出的
+                 audit_summary.json);提供时额外生成 figA_* 系列(黑白印刷友好):
+                 figA_detection_table.png  注入-检出结果表(行=C1/C2/C3/健康)
+                 figA_latency_dist.png     检出时延分布(按检查点)
+                 figA_coding_dist.png      证伪编码等级分布(JSON 含 coding 键时;
+                                           前/后测堆叠条,编码来自人工双评)
+                 论文图号确定后再统一改名
 """
 import argparse
 import json
@@ -294,6 +301,121 @@ def fig6_composite(outdir):
     canvas.save(f"{outdir}/fig6_composite.jpeg", quality=90)
 
 
+# ============================================================
+# figA 系列:过程性证据(注入-检出实验)出图对接(任务六.7)
+#     数据源 = tools/audit_tools/analyze_packs.py 的 audit_summary.json
+#     黑白印刷友好;论文图号确定后再统一改名
+# ============================================================
+def _fmt_rate(rate, ci):
+    if rate is None:
+        return "—"
+    s = f"{rate*100:.0f}%"
+    if ci:
+        s += f" [{ci[0]*100:.0f}, {ci[1]*100:.0f}]"
+    return s
+
+
+def figA_detection_table(outdir, dpi, audit):
+    rows, cells = [], []
+    for cp in ("C1", "C2", "C3"):
+        m = audit["checkpoints"][cp]
+        lat = m.get("latency_ms")
+        lat_s = (f"{lat['median']/1000:.1f} [{lat['iqr'][0]/1000:.1f}, "
+                 f"{lat['iqr'][1]/1000:.1f}]" if lat else "—")
+        loc = m.get("localization_accuracy")
+        rows.append(f"{cp} 注入")
+        cells.append([str(m["n"]), f"{m['detected']} / {m['n'] - m['detected']}",
+                      _fmt_rate(m.get("detection_rate"), m.get("detection_ci95")),
+                      f"{loc*100:.0f}%" if loc is not None else "—", lat_s])
+    h = audit["healthy"]
+    rows.append("健康(对照)")
+    cells.append([str(h["n"]), f"{h['false_alarms']} / {h['n'] - h['false_alarms']}",
+                  _fmt_rate(h.get("false_alarm_rate"), h.get("false_alarm_ci95")),
+                  "—", "—"])
+    cols = ["轮次 N", "发现/漏检\n(健康:误报/拒报)",
+            "发现率 [95%CI]\n(健康:误报率)", "定位准确率", "时延中位 [IQR] / s"]
+    fig, ax = plt.subplots(figsize=(10.4, 2.9), dpi=dpi)
+    ax.axis("off")
+    tab = ax.table(cellText=cells, rowLabels=rows, colLabels=cols,
+                   cellLoc="center", loc="center")
+    tab.auto_set_font_size(False)
+    tab.set_fontsize(11.5)
+    tab.scale(1.0, 2.0)
+    for (r, c), cell in tab.get_celld().items():
+        cell.set_edgecolor("black")
+        if r == 0:
+            cell.set_facecolor("0.88")
+            cell.set_text_props(weight="bold")
+    ax.set_title(f"注入-检出实验结果(n={audit.get('n_packs')} 会话)",
+                 fontsize=13, pad=6)
+    fig.tight_layout()
+    fig.savefig(f"{outdir}/figA_detection_table.png")
+    plt.close(fig)
+
+
+def figA_latency_dist(outdir, dpi, audit):
+    data, labels = [], []
+    for cp in ("C1", "C2", "C3"):
+        lat = audit["checkpoints"][cp].get("latency_ms")
+        if lat and lat.get("values"):
+            data.append([v / 1000.0 for v in lat["values"]])
+            labels.append(f"{cp}\n(n={lat['n']})")
+    if not data:
+        print("[跳过] figA_latency_dist: 无命中轮时延数据")
+        return
+    fig, ax = plt.subplots(figsize=(6.4, 4.2), dpi=dpi)
+    bp = ax.boxplot(data, tick_labels=labels, widths=0.45, patch_artist=True,
+                    medianprops=dict(color="black", lw=2),
+                    boxprops=dict(facecolor="0.85", edgecolor="black"),
+                    whiskerprops=dict(color="black"), capprops=dict(color="black"),
+                    flierprops=dict(marker="o", mfc="white", mec="black"))
+    for i, vals in enumerate(data, 1):   # 叠加散点,样本量小时分布可见
+        ax.plot([i] * len(vals), vals, "o", mfc="white", mec="black", ms=5, zorder=3)
+    ax.set_ylabel("检出时延 / s", fontsize=13)
+    ax.set_title("命中轮检出时延分布(判定时刻 − 注入 onset)", fontsize=13, pad=8)
+    ax.grid(axis="y", ls=":", alpha=0.5)
+    ax.set_axisbelow(True)
+    ax.spines[["top", "right"]].set_visible(False)
+    fig.tight_layout()
+    fig.savefig(f"{outdir}/figA_latency_dist.png")
+    plt.close(fig)
+
+
+def figA_coding_dist(outdir, dpi, audit):
+    """证伪编码等级(0-3)分布:audit_summary.json 含人工编码结果 coding 键时生成。
+    期望结构:{"coding": {"pre": {"0":n,...,"3":n}, "post": {...}}}"""
+    coding = audit.get("coding")
+    if not coding:
+        return
+    groups = [k for k in ("pre", "post") if k in coding]
+    if not groups:
+        return
+    labels = {"pre": "前测", "post": "后测"}
+    hatches = ["", "//", "..", "xx"]
+    grays = ["0.95", "0.75", "0.5", "0.25"]
+    fig, ax = plt.subplots(figsize=(6.0, 4.2), dpi=dpi)
+    x = np.arange(len(groups))
+    bottom = np.zeros(len(groups))
+    for lv in range(4):
+        vals = np.array([coding[g].get(str(lv), 0) for g in groups], dtype=float)
+        totals = np.array([max(sum(coding[g].values()), 1) for g in groups])
+        pct = vals / totals * 100
+        ax.bar(x, pct, 0.5, bottom=bottom, facecolor=grays[lv], hatch=hatches[lv],
+               edgecolor="black", label=f"{lv} 级")
+        bottom += pct
+    ax.set_xticks(x)
+    ax.set_xticklabels([labels[g] for g in groups], fontsize=13)
+    ax.set_ylabel("占比 / %", fontsize=13)
+    ax.set_ylim(0, 100)
+    ax.set_title("证伪行为编码等级分布(0=仅确认 … 3=系统证伪)", fontsize=13, pad=8)
+    ax.legend(ncol=4, fontsize=11, frameon=False, loc="upper center",
+              bbox_to_anchor=(0.5, -0.12))
+    ax.spines[["top", "right"]].set_visible(False)
+    fig.subplots_adjust(bottom=0.22)
+    fig.savefig(f"{outdir}/figA_coding_dist.png")
+    plt.close(fig)
+
+
 def load_eval_json(path):
     """读取 audit/run_action1.py 导出的 eval_summary.json,归一为图 4 所需结构。"""
     with open(path, encoding="utf-8") as fh:
@@ -313,6 +435,8 @@ def main():
     ap.add_argument("--dpi", type=int, default=200, help="输出 DPI(默认 200,投稿建议 300)")
     ap.add_argument("--eval-json", default=None,
                     help="评测汇总 JSON(eval_summary.json);提供时图 4 用实测数据")
+    ap.add_argument("--audit-json", default=None,
+                    help="过程性证据汇总 JSON(audit_summary.json);提供时生成 figA_* 系列")
     args = ap.parse_args()
 
     setup_cjk_font()
@@ -330,6 +454,15 @@ def main():
     fig7(args.outdir, args.dpi)
     fig8(args.outdir, args.dpi)
     fig6_composite(args.outdir)
+
+    if args.audit_json:
+        with open(args.audit_json, encoding="utf-8") as fh:
+            audit = json.load(fh)
+        print(f"[figA] 使用过程性证据数据: {args.audit_json}")
+        figA_detection_table(args.outdir, args.dpi, audit)
+        figA_latency_dist(args.outdir, args.dpi, audit)
+        figA_coding_dist(args.outdir, args.dpi, audit)
+
     print(f"figures written to {args.outdir} (dpi={args.dpi})")
 
 
