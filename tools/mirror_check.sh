@@ -10,7 +10,7 @@ HEAD_RE='^refs/heads/(master|release/.+|paper-sync-v1\.1|paper2-embodied-simlite
 a=$(git ls-remote --tags --heads "$G1" 2>/dev/null) || { echo "mirror: 无法访问 $G1" >&2; exit 2; }
 b=$(git ls-remote --tags --heads "$G2" 2>/dev/null) || { echo "mirror: 无法访问 $G2" >&2; exit 2; }
 # 挂账豁免（只报不红；每条须附原因，解除时删行并记 FROZEN-CI）：
-#   refs/heads/paper2-embodied-simlite —— e2b6474 树命中凭证审计误报（embodied_env.py:398 注释词 "secretly"，DECISIONS 09-05 判误报，
+#   refs/heads/paper2-embodied-simlite —— e2b6474 树命中凭证审计误报（embodied_env.py:398 注释中的一个副词，dream-os DECISIONS 09-05 判误报，
 #   词根收紧待「第三分支处置令」），推送前硬门拒推故暂不能镜像；tag paper2-final（4f111ad）审计零命中已镜像。
 WAIVED='^refs/heads/paper2-embodied-simlite$'
 refs=$( { echo "$a"; echo "$b"; } | awk '{print $2}' | grep -v '\^{}$' | grep -E "$TAG_RE|$HEAD_RE" | sort -u)
