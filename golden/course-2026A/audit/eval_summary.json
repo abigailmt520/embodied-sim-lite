@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "policy": {
+    "file": "ppo_embodied_agent.pth",
+    "sha256_12": "892ea8078cf2"
+  },
+  "n_maps": 25,
+  "episodes_per_map": 1,
+  "seed_range": [
+    100,
+    124
+  ],
+  "counts": {
+    "success": 21,
+    "collision": 3,
+    "timeout": 1
+  },
+  "rates": {
+    "success": 0.84,
+    "collision": 0.12,
+    "timeout": 0.04
+  },
+  "n_episodes": 25,
+  "success_rate": 0.84,
+  "collision_rate": 0.12,
+  "timeout_rate": 0.04,
+  "avg_steps_success": 80.76190476190476,
+  "avg_steps_all": 93.04
+}

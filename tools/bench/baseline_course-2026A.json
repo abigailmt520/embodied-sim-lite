@@ -1,0 +1,101 @@
+{
+  "note": "course-2026A 平台代码基线（分支 guard/cso-028 上实测；平台代码与 bc8fa50 零差异——bc8fa50..HEAD 仅 README/artifacts/tools/docs/CI 变动）",
+  "recorded": "2026-09-08T02:49:25-07:00",
+  "machine": {
+    "system": "Darwin",
+    "release": "25.5.0",
+    "machine": "arm64",
+    "ncpu": 12,
+    "python": "3.13.12",
+    "hw_model": "Mac14,9",
+    "cpu_brand": "Apple M2 Pro",
+    "mem_gb": 16.0,
+    "numpy": "2.4.6",
+    "torch": "2.12.1",
+    "stable_baselines3": "2.9.0",
+    "gymnasium": "1.3.0",
+    "fastapi": "0.137.1",
+    "uvicorn": "0.49.0"
+  },
+  "kernel": {
+    "steps": 6000,
+    "cpu_ms_per_step": 0.1623,
+    "wall_ms_per_step": 0.1623,
+    "steps_per_sec_headless": 6161.8,
+    "equiv_pct_one_core_at_10hz": 0.162,
+    "equiv_pct_one_core_at_60hz": 0.974
+  },
+  "gateway_idle_0client": {
+    "server": "inference_server.py",
+    "clients": 0,
+    "duration_s": 30,
+    "n_samples": 30,
+    "health": {
+      "service": "Embodied-SimLite Inference Gateway",
+      "tick_hz": 60.0,
+      "clients": 0,
+      "ws_endpoint": "/ws"
+    },
+    "frames_received_total": 0,
+    "pct_one_core": {
+      "mean": 15.95,
+      "median": 16.15,
+      "p95": 17.2,
+      "max": 17.4
+    },
+    "pct_of_machine_mean": 1.329,
+    "basis": "ps %cpu：单核=100%；pct_of_machine = 均值/逻辑核数"
+  },
+  "gateway_1client": {
+    "server": "inference_server.py",
+    "clients": 1,
+    "duration_s": 30,
+    "n_samples": 30,
+    "health": {
+      "service": "Embodied-SimLite Inference Gateway",
+      "tick_hz": 60.0,
+      "clients": 0,
+      "ws_endpoint": "/ws"
+    },
+    "frames_received_total": 2034,
+    "pct_one_core": {
+      "mean": 19.04,
+      "median": 19.35,
+      "p95": 20.8,
+      "max": 21.1
+    },
+    "pct_of_machine_mean": 1.586,
+    "basis": "ps %cpu：单核=100%；pct_of_machine = 均值/逻辑核数"
+  },
+  "nav_gateway_1client": {
+    "server": "nav_gateway.py",
+    "clients": 1,
+    "duration_s": 20,
+    "n_samples": 20,
+    "health": {
+      "mode": "nav-static",
+      "seed": 42,
+      "slip": 0.0,
+      "tick_hz": 10.0,
+      "tick_n": 3,
+      "uptime_s": 0.3,
+      "robot_truth": {
+        "x": 8.08,
+        "y": 6.238,
+        "theta_deg": 88.1
+      },
+      "terminated_events": 0,
+      "clients": 0
+    },
+    "frames_received_total": 234,
+    "pct_one_core": {
+      "mean": 1.74,
+      "median": 1.75,
+      "p95": 2.4,
+      "max": 2.8
+    },
+    "pct_of_machine_mean": 0.145,
+    "basis": "ps %cpu：单核=100%；pct_of_machine = 均值/逻辑核数"
+  },
+  "basis": "ps %cpu 单核=100%；pct_of_machine=均值/逻辑核数；kernel 折算见 cpu_usage.py"
+}

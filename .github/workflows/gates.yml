@@ -1,0 +1,74 @@
+# CI 三道门（CSO-028 平台保护令·任务2）：三门全绿方可合并 master（分支保护 required checks = 下列三个 job 名）
+# 门1 三门自检（旧）｜门2 课程一致性（ready_check --course 对 course-2026A）｜门3 论文复现（冻结基准子集复跑）
+# 定义与容差成文：FROZEN-CI.md；纪律：ITERATION.md
+name: gates
+on:
+  push:
+    branches: ["**"]
+    tags-ignore: ["**"]
+  pull_request:
+  workflow_dispatch:
+concurrency:
+  group: gates-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PYTHONDONTWRITEBYTECODE: "1"
+jobs:
+  gate1-selfcheck:
+    name: gate1-selfcheck
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0, fetch-tags: true}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.13", cache: pip, cache-dependency-path: requirements.txt}
+      - name: deps (torch CPU wheel + requirements)
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements.txt
+      - name: 门1 三门自检
+        run: python3 tools/ready_check.py --selfcheck --json gate1.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: gate1, path: gate1.json}
+  gate2-course:
+    name: gate2-course
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0, fetch-tags: true}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.13", cache: pip, cache-dependency-path: requirements.txt}
+      - name: deps (torch CPU wheel + requirements)
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements.txt
+      - name: 门2 课程一致性（manifest↔tag↔commit，A/B 同机复跑，golden 对照）
+        run: python3 tools/ready_check.py --course --json gate2.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: gate2, path: gate2.json}
+  gate3-paper:
+    name: gate3-paper
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0, fetch-tags: true}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.13", cache: pip, cache-dependency-path: requirements.txt}
+      - name: deps (torch CPU wheel + requirements)
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements.txt
+      - name: 门3 论文复现（artifacts 只增不改，冻结子集派生复跑，平台论文数字）
+        run: python3 tools/ready_check.py --paper --json gate3.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: gate3, path: gate3.json}

@@ -1,0 +1,84 @@
+# course_manifest.yaml —— 课程冻结面清单（CSO-028 平台保护令·三不可变面之一）
+# 课程只从 course.tag 安装；期中不升级；升级仅由主理人下令后经一致性检查迁移。
+# 校验：python3 tools/ready_check.py --course（CI 门2）。本文件改动＝课程迁移令，须附 DECISIONS 记录。
+schema_version: 1
+
+course:
+  id: course-2026A
+  tag: course-2026A                       # 课程冻结 tag（附注 tag，不可移动）
+  pinned_commit: bc8fa5018592c0efdadc3c471be16f46dc422dc1   # = paper-sync-v1.1 当前 HEAD（bc8fa50）
+  same_as: paper-sync-v1.1                # 与该冻结分支同点
+  release_line: release/v1.1              # 现钉版对应的发布分支（热修只入此线，课程不自动跟随）
+  contract:
+    path: docs/teaching_api.md
+    version: 1.0.0                        # 教学接口契约（语义化版本；改契约须升主版本并附迁移说明）
+
+paper:
+  jsjjy_tag: paper-jsjjy-2026             # 《计算机教育》论文复现锚（= paper-sync-v1.1 HEAD）
+  p4_tag: paper-p4-v1                     # Paper 87（ICCWAMTIP 2026）提交日锚（= paper87-artifacts-r3.1，b83ec8c）
+  p4_commit: b83ec8c0838fbea2a4f9f0682e018c4fce023ef8
+  artifacts_lock: artifacts/HASHES.lock   # artifacts 只增不改守卫
+  frozen_subset: artifacts/eval/ci_frozen_subset.json
+
+golden:
+  dir: golden/course-2026A                # golden 基准输出集（course tag 下旧入口产物录制，归一化后字节 + 哈希清单）
+  policy: bench-strict                    # bench-strict：与录制指纹同机→逐字节强制；异机→report（A/B 同机复跑始终强制）
+  bench_machine: tools/bench/BENCH-MACHINE.md
+  env:                                    # 录制与复跑统一的运行环境（确定性）
+    OMP_NUM_THREADS: "1"
+    MKL_NUM_THREADS: "1"
+    PYTHONHASHSEED: "0"
+    MPLBACKEND: "Agg"
+
+# 种子封存（旧入口内置常量；改动即等价于改契约）
+seeds:
+  run_action1.SEED_SESSION: 11
+  run_action1.SEED_EVAL: "100..124 (N_EVAL_EPISODES=25)"
+  run_action1.N_LIVE: 240
+  run_action1.N_DISCONNECT: 15
+  record_fork.SEED: 7
+  record_fork.STEPS: 500
+  record_fork.ACTION: "[0.6, 0.25]"
+  make_gt_map.seed: 42
+  env.SLIP_FACTOR: 0.05
+
+# 旧入口（课程使用的入口命令）：产物在 HEAD 与 course tag 两棵树同机复跑须逐字节一致
+entries:
+  - id: selfcheck3
+    desc: 三门自检（审计抓假·红 / 放行健康·绿 / PPO 25 回合评测）
+    cmd: ["python3", "audit/run_action1.py"]
+    outputs:
+      - {path: audit/eval_episodes.csv}
+      - {path: audit/eval_summary.json, normalize: [json_drop_keys], drop_keys: [generated_at]}
+      - {path: audit/eval_metrics.png}
+      - {path: audit/sessions/healthy.json}
+      - {path: audit/sessions/injected_1-A_truth_copy.json}
+      - {path: audit/sessions/injected_1-B_seq_freeze.json}
+      - {path: audit/sessions/injected_1-C_stall_running.json}
+    stdout: {path: audit/run_action1.stdout.txt, normalize: [strip_root]}
+  - id: fork
+    desc: 真分叉记录器（before/after 500 步开环定曲率）
+    cmd: ["python3", "diagnostics/record_fork.py"]
+    outputs:
+      - {path: diagnostics/fork_before.csv}
+      - {path: diagnostics/fork_after.csv}
+      - {path: diagnostics/fork_error_curve.png}
+    stdout: {path: diagnostics/record_fork.stdout.txt, normalize: [strip_root]}
+  - id: gt_map
+    desc: 静态世界真值出图（seed 42；pgm 哈希与 FROZEN.md 世界定义 16522b3b… 同源）
+    cmd: ["python3", "make_gt_map.py", "--seed", "42", "--out", "{tmp}"]
+    outputs:
+      - {path: "{tmp}/map_gt.pgm", as: nav/map_gt.pgm}
+      - {path: "{tmp}/map_gt.yaml", as: nav/map_gt.yaml}
+    stdout: {path: nav/make_gt_map.stdout.txt, normalize: [strip_root]}
+
+# 不纳入 golden 的入口及原因（如实登记，不假装覆盖）
+excluded_entries:
+  - {cmd: "python inference_server.py", why: 长驻服务，墙钟驱动；其状态契约由 docs/teaching_api.md 成文，CPU 占用由 tools/bench 度量}
+  - {cmd: "python nav_gateway.py", why: 同上}
+  - {cmd: "python ros_bridge.py", why: 需 ROS 2 环境（rclpy），CI 与基准机均无}
+  - {cmd: "python make_nav2_params_navmode.py", why: 读取 /opt/ros/jazzy 默认参数文件，无 ROS 2 即失败}
+  - {cmd: "python audit/capture_offline.py", why: 需 headless Chrome}
+  - {cmd: "python audit/make_audit_figure.py", why: 依赖 sessions（已由 selfcheck3 覆盖）；图件文字渲染依赖字体，不作逐字节锚}
+  - {cmd: "python train_agent.py", why: 训练非确定且耗时；权重 ppo_embodied_agent.pth 已随库冻结（哈希入 golden RECORD）}
+  - {cmd: "python embodied_env.py", why: 自检用未播种的 action_space.sample()，输出非确定}

@@ -12,3 +12,6 @@ matplotlib>=3.7
 # —— ROS 2 桥接（ros_bridge.py）额外依赖，需在 Ubuntu + ROS 2 环境中安装 —— #
 #   随 ROS 2 发行版提供： rclpy, tf2_ros, geometry_msgs, nav_msgs, sensor_msgs
 #   额外 pip 安装：       websocket-client     （ros_bridge.py 的 `import websocket`）
+
+# —— 工具与 CI 三道门（tools/ready_check.py、artifacts/eval/count_oov_targets.py）—— #
+pyyaml>=6.0

@@ -2,6 +2,7 @@
 > 📌 **Paper-87 artifact snapshot**: tag `paper87-artifacts-r3.1` (artifacts commit `7a071a2`; supersedes r3 — datapack 3B section added; r3 and `paper87-artifacts` retained, see artifacts/ERRATA.md) · benchmark SHA-256 `101477654d98d4d88ba50dc4b73873ca635bb7baff13bb7ae6c69bf4c0ac2d8e` · path `artifacts/`
 > 📌 **Paper-2 平台快照**：tag `paper2-final`（commit `4f111ad`，独立分支 `paper2-embodied-simlite`，冻结、不并入 master）
 > 📌 **Paper-2 platform snapshot**: tag `paper2-final` (commit `4f111ad`, standalone branch `paper2-embodied-simlite`, frozen, never merged into master)
+> 📌 **保护面 / 三道门（CSO-028）**：课程 tag `course-2026A`（= `paper-sync-v1.1` HEAD）· 论文 tag `paper-jsjjy-2026`、`paper-p4-v1` · 契约 `docs/teaching_api.md` v1.0.0 · 纪律 `ITERATION.md` · CI 门定义 `FROZEN-CI.md` · 本地 `python3 tools/ready_check.py --all`
 
 # Embodied-SimLite
 

@@ -1,0 +1,74 @@
+==========================================================================
+  动作1 · 防自欺审计 + 基础评测  ——  三道门实跑
+==========================================================================
+
+[健康 session] 255 帧 (online 240 + offline 15)，seq 1→240
+
+──────────────────────────────────────────────────────────────────────────
+【门 2｜审计放行健康系统（期望：全绿）】
+──────────────────────────────────────────────────────────────────────────
+  审计总判定：🟢 ✓ 全绿通过 (GREEN)
+    [✓ GREEN] C1_TRUTH_ODOM_FORK     C1 真值-里程计真分叉 / TRUTH_ODOM_FORK
+             └─ 行程 L=25.07m 内 Truth–Odom 最大误差 0.714m @seq=86（真分叉）
+    [✓ GREEN] C2_SEQ_INTEGRITY       C2 帧序号单调 / SEQ_INTEGRITY
+             └─ 所有 online 帧的帧序号随数据更新单调自增
+    [✓ GREEN] C3_FEED_LIVENESS       C3 断流冻结 / FEED_LIVENESS
+             └─ 无'断流却显示运行中'：陈旧帧均已正确标记 OFFLINE 冻结
+
+──────────────────────────────────────────────────────────────────────────
+【门 1｜审计抓假：注入 1-A/1-B/1-C，期望逐一判红并定位】
+──────────────────────────────────────────────────────────────────────────
+
+  ▶ 注入 [1-A_truth_copy]：把 Odom 逐帧接回真值（odom←truth），复刻 ox=robot.x 波将金村
+    期望判红检查项：C1_TRUTH_ODOM_FORK
+  审计总判定：🔴 ✗ 检出自欺 (RED)
+    [✗ RED  ] C1_TRUTH_ODOM_FORK     C1 真值-里程计真分叉 / TRUTH_ODOM_FORK
+             └─ 行程 L=25.07m 内 Truth–Odom 最大误差仅 0.00e+00m (<1e-04) —— 里程计无漂移/疑似抄真值（假仪表）
+             └─ 定位: {'max_err_m': 0.0, 'truth_path_len_m': 25.072, 'n_online_frames': 240}
+    [✓ GREEN] C2_SEQ_INTEGRITY       C2 帧序号单调 / SEQ_INTEGRITY
+             └─ 所有 online 帧的帧序号随数据更新单调自增
+    [✓ GREEN] C3_FEED_LIVENESS       C3 断流冻结 / FEED_LIVENESS
+             └─ 无'断流却显示运行中'：陈旧帧均已正确标记 OFFLINE 冻结
+    → 抓假成功 ✅
+
+  ▶ 注入 [1-B_seq_freeze]：数据仍在更新却冻结帧序号（帧序号撒谎）
+    期望判红检查项：C2_SEQ_INTEGRITY
+  审计总判定：🔴 ✗ 检出自欺 (RED)
+    [✓ GREEN] C1_TRUTH_ODOM_FORK     C1 真值-里程计真分叉 / TRUTH_ODOM_FORK
+             └─ 行程 L=25.07m 内 Truth–Odom 最大误差 0.714m @seq=86（真分叉）
+    [✗ RED  ] C2_SEQ_INTEGRITY       C2 帧序号单调 / SEQ_INTEGRITY
+             └─ 数据在更新（真值移动 0.100m）但帧序号冻结于 seq=73
+             └─ 定位: {'frame_index': 73, 'frozen_seq': 73, 'recv_t': 7.4}
+    [✓ GREEN] C3_FEED_LIVENESS       C3 断流冻结 / FEED_LIVENESS
+             └─ 无'断流却显示运行中'：陈旧帧均已正确标记 OFFLINE 冻结
+    → 抓假成功 ✅
+
+  ▶ 注入 [1-C_stall_running]：把断流冻结段的链路声明从 offline 改回 online（断流却显示运行中）
+    期望判红检查项：C3_FEED_LIVENESS
+  审计总判定：🔴 ✗ 检出自欺 (RED)
+    [✓ GREEN] C1_TRUTH_ODOM_FORK     C1 真值-里程计真分叉 / TRUTH_ODOM_FORK
+             └─ 行程 L=25.07m 内 Truth–Odom 最大误差 0.714m @seq=86（真分叉）
+    [✓ GREEN] C2_SEQ_INTEGRITY       C2 帧序号单调 / SEQ_INTEGRITY
+             └─ 所有 online 帧的帧序号随数据更新单调自增
+    [✗ RED  ] C3_FEED_LIVENESS       C3 断流冻结 / FEED_LIVENESS
+             └─ feed 已停更（自 seq=240 起连续 2 帧数据冻结、墙钟仍在推进）但链路仍声明 online —— 断流却显示运行中
+             └─ 定位: {'stale_from_frame': 240, 'frozen_seq': 240, 'recv_t_span': [24.1, 24.2], 'link_status': 'online'}
+    → 抓假成功 ✅
+
+──────────────────────────────────────────────────────────────────────────
+【门 3｜基础评测：PPO × N=25 回合（固定种子）】
+──────────────────────────────────────────────────────────────────────────
+  成功率 success_rate   : 84.0%
+  碰撞率 collision_rate : 12.0%
+  超时率 timeout_rate   : 4.0%
+  平均到达步数(成功回合): 80.8
+  平均步数(全部回合)    : 93.0
+  [OK] 图: audit/eval_metrics.png   逐回合: audit/eval_episodes.csv
+
+==========================================================================
+  验收门汇总
+==========================================================================
+  门 1（审计抓假·红）: ✅ 通过（3/3 注入全部判红并定位）
+  门 2（放行健康·绿）: ✅ 通过（健康系统全绿）
+  门 3（基础评测）   : ✅ 已产出真实指标 + 图（成功率 84%）
+  [OK] 机器可读汇总: <ROOT>/audit/eval_summary.json（可用于 make_paper_figures.py --eval-json）

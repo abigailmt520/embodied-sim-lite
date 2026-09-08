@@ -1,0 +1,474 @@
+{
+ "models": {
+  "1.5B": {
+   "subset": {
+    "102": {
+     "action": "navigate",
+     "targets": [
+      "W2_charge"
+     ],
+     "system_action": "navigate",
+     "score": 0
+    },
+    "103": {
+     "action": "navigate",
+     "targets": [
+      "W3_podium"
+     ],
+     "system_action": "navigate",
+     "score": 0
+    },
+    "104": {
+     "action": "navigate",
+     "targets": [
+      "W3_podium"
+     ],
+     "system_action": "reject",
+     "score": 0
+    },
+    "105": {
+     "action": "navigate",
+     "targets": [
+      "W1_door"
+     ],
+     "system_action": "reject",
+     "score": 0
+    },
+    "106": {
+     "action": "navigate",
+     "targets": [
+      "W2_charge"
+     ],
+     "system_action": "reject",
+     "score": 0
+    },
+    "107": {
+     "action": "navigate",
+     "targets": [
+      "W7_trash"
+     ],
+     "system_action": "reject",
+     "score": 0
+    },
+    "108": {
+     "action": "navigate",
+     "targets": [
+      "W8_home"
+     ],
+     "system_action": "navigate",
+     "score": 0
+    },
+    "109": {
+     "action": "navigate",
+     "targets": [
+      "W8_home"
+     ],
+     "system_action": "reject",
+     "score": 0
+    },
+    "111": {
+     "action": "navigate",
+     "targets": [
+      "W1_door"
+     ],
+     "system_action": "reject",
+     "score": 0
+    },
+    "112": {
+     "action": "navigate",
+     "targets": [
+      "W3_podium"
+     ],
+     "system_action": "navigate",
+     "score": 0
+    },
+    "114": {
+     "action": "navigate",
+     "targets": [
+      "W1_door"
+     ],
+     "system_action": "navigate",
+     "score": 0
+    },
+    "115": {
+     "action": "navigate",
+     "targets": [
+      "W3_podium"
+     ],
+     "system_action": "reject",
+     "score": 0
+    },
+    "117": {
+     "action": "navigate",
+     "targets": [
+      "W5_window"
+     ],
+     "system_action": "reject",
+     "score": 0
+    },
+    "119": {
+     "action": "navigate",
+     "targets": [
+      "W1_door"
+     ],
+     "system_action": "reject",
+     "score": 0
+    }
+   },
+   "totals": {
+    "n": 120,
+    "score_sum": 72,
+    "by_stratum": {
+     "S1": 24,
+     "S2": 6,
+     "S3": 20,
+     "S4": 20,
+     "S5": 2
+    }
+   }
+  },
+  "3B": {
+   "subset": {
+    "102": {
+     "action": "clarify",
+     "targets": [],
+     "system_action": "clarify",
+     "score": 0
+    },
+    "103": {
+     "action": "clarify",
+     "targets": [],
+     "system_action": "clarify",
+     "score": 0
+    },
+    "104": {
+     "action": "reject",
+     "targets": [],
+     "system_action": "reject",
+     "score": 1
+    },
+    "105": {
+     "action": "reject",
+     "targets": [],
+     "system_action": "reject",
+     "score": 1
+    },
+    "106": {
+     "action": "reject",
+     "targets": [],
+     "system_action": "reject",
+     "score": 1
+    },
+    "107": {
+     "action": "reject",
+     "targets": [],
+     "system_action": "reject",
+     "score": 1
+    },
+    "108": {
+     "action": "clarify",
+     "targets": [],
+     "system_action": "clarify",
+     "score": 0
+    },
+    "109": {
+     "action": "reject",
+     "targets": [],
+     "system_action": "reject",
+     "score": 1
+    },
+    "111": {
+     "action": "clarify",
+     "targets": [],
+     "system_action": "clarify",
+     "score": 0
+    },
+    "112": {
+     "action": "clarify",
+     "targets": [],
+     "system_action": "clarify",
+     "score": 0
+    },
+    "114": {
+     "action": "clarify",
+     "targets": [],
+     "system_action": "clarify",
+     "score": 0
+    },
+    "115": {
+     "action": "reject",
+     "targets": [],
+     "system_action": "reject",
+     "score": 1
+    },
+    "117": {
+     "action": "clarify",
+     "targets": [],
+     "system_action": "clarify",
+     "score": 0
+    },
+    "119": {
+     "action": "reject",
+     "targets": [],
+     "system_action": "reject",
+     "score": 1
+    }
+   },
+   "totals": {
+    "n": 120,
+    "score_sum": 88,
+    "by_stratum": {
+     "S1": 24,
+     "S2": 14,
+     "S3": 21,
+     "S4": 13,
+     "S5": 16
+    }
+   }
+  },
+  "Fallback 2": {
+   "subset": {
+    "102": {
+     "action": "reject",
+     "targets": [],
+     "system_action": "reject",
+     "score": 1
+    },
+    "103": {
+     "action": "reject",
+     "targets": [],
+     "system_action": "reject",
+     "score": 1
+    },
+    "104": {
+     "action": "reject",
+     "targets": [],
+     "system_action": "reject",
+     "score": 1
+    },
+    "105": {
+     "action": "reject",
+     "targets": [],
+     "system_action": "reject",
+     "score": 1
+    },
+    "106": {
+     "action": "reject",
+     "targets": [],
+     "system_action": "reject",
+     "score": 1
+    },
+    "107": {
+     "action": "reject",
+     "targets": [],
+     "system_action": "reject",
+     "score": 1
+    },
+    "108": {
+     "action": "reject",
+     "targets": [],
+     "system_action": "reject",
+     "score": 1
+    },
+    "109": {
+     "action": "reject",
+     "targets": [],
+     "system_action": "reject",
+     "score": 1
+    },
+    "111": {
+     "action": "reject",
+     "targets": [],
+     "system_action": "reject",
+     "score": 1
+    },
+    "112": {
+     "action": "reject",
+     "targets": [],
+     "system_action": "reject",
+     "score": 1
+    },
+    "114": {
+     "action": "reject",
+     "targets": [],
+     "system_action": "reject",
+     "score": 1
+    },
+    "115": {
+     "action": "reject",
+     "targets": [],
+     "system_action": "reject",
+     "score": 1
+    },
+    "117": {
+     "action": "reject",
+     "targets": [],
+     "system_action": "reject",
+     "score": 1
+    },
+    "119": {
+     "action": "reject",
+     "targets": [],
+     "system_action": "reject",
+     "score": 1
+    }
+   },
+   "totals": {
+    "n": 120,
+    "score_sum": 116,
+    "by_stratum": {
+     "S1": 24,
+     "S2": 23,
+     "S3": 23,
+     "S4": 22,
+     "S5": 24
+    }
+   }
+  },
+  "Teacher": {
+   "subset": {
+    "102": {
+     "action": "reject",
+     "targets": [],
+     "system_action": "reject",
+     "score": 1
+    },
+    "103": {
+     "action": "reject",
+     "targets": [],
+     "system_action": "reject",
+     "score": 1
+    },
+    "104": {
+     "action": "reject",
+     "targets": [],
+     "system_action": "reject",
+     "score": 1
+    },
+    "105": {
+     "action": "reject",
+     "targets": [],
+     "system_action": "reject",
+     "score": 1
+    },
+    "106": {
+     "action": "reject",
+     "targets": [],
+     "system_action": "reject",
+     "score": 1
+    },
+    "107": {
+     "action": "reject",
+     "targets": [],
+     "system_action": "reject",
+     "score": 1
+    },
+    "108": {
+     "action": "reject",
+     "targets": [],
+     "system_action": "reject",
+     "score": 1
+    },
+    "109": {
+     "action": "reject",
+     "targets": [],
+     "system_action": "reject",
+     "score": 1
+    },
+    "111": {
+     "action": "reject",
+     "targets": [],
+     "system_action": "reject",
+     "score": 1
+    },
+    "112": {
+     "action": "reject",
+     "targets": [],
+     "system_action": "reject",
+     "score": 1
+    },
+    "114": {
+     "action": "reject",
+     "targets": [],
+     "system_action": "reject",
+     "score": 1
+    },
+    "115": {
+     "action": "reject",
+     "targets": [],
+     "system_action": "reject",
+     "score": 1
+    },
+    "117": {
+     "action": "reject",
+     "targets": [],
+     "system_action": "reject",
+     "score": 1
+    },
+    "119": {
+     "action": "reject",
+     "targets": [],
+     "system_action": "reject",
+     "score": 1
+    }
+   },
+   "totals": {
+    "n": 120,
+    "score_sum": 117,
+    "by_stratum": {
+     "S1": 24,
+     "S2": 23,
+     "S3": 23,
+     "S4": 23,
+     "S5": 24
+    }
+   }
+  }
+ },
+ "subset_ids": [
+  "102",
+  "103",
+  "104",
+  "105",
+  "106",
+  "107",
+  "108",
+  "109",
+  "111",
+  "112",
+  "114",
+  "115",
+  "117",
+  "119"
+ ],
+ "table2": {
+  "n": 93,
+  "reached": 93
+ },
+ "stress": {
+  "n": 50,
+  "results": {
+   "not_reached": 50
+  }
+ },
+ "platform_paper": {
+  "ppo": {
+   "n": 25,
+   "success": 21,
+   "collision": 3,
+   "timeout": 1,
+   "avg_steps_success": 80.8
+  },
+  "fork": {
+   "ATE_RMSE": 0.831123,
+   "final_err": 1.532276,
+   "max_err": 1.54648,
+   "final_yaw_drift_deg": -53.6709
+  }
+ },
+ "_meta": {
+  "written": "2026-09-08",
+  "head": "b83ec8c0838fbea2a4f9f0682e018c4fce023ef8",
+  "note": "只引 benchmark id；不含 instruction 文本"
+ }
+}
