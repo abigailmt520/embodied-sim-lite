@@ -6,6 +6,8 @@
 ## ② 编号与回报
 - 令号前缀 **FORGE-###**（自 FORGE-001 起；旧号 CSO-026/028 存档不改）。执行摘要末尾注明「本轮执行：FORGE-0XX」。
 
+- **本仓 CSO 件以 dream-os 的信箱为准**：`00_portfolio/inbox/CSO-inbox.md`（唯一账，已办全文在 `inbox/done/`）；**跨仓件在信箱条目里注明目标仓**。CC 每次开工先读信箱、报未办项。
+
 ## ③ 真源与纪律（以仓内既有文件为准）
 - `ITERATION.md`：加法＋开关（默认关，旧入口逐字节一致）／三道门／tag only／契约 semver／双钥匙／性能预算／攻击语料隔离。
 - **三道门全绿方可合并 master**（gate1-selfcheck / gate2-course / gate3-paper，required checks + enforce_admins）；定义与容差 `FROZEN-CI.md`；本地 `python3 tools/ready_check.py --all`。
