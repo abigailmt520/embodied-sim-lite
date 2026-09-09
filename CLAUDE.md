@@ -17,3 +17,20 @@
 ## ④ 当前状态与 INDEX
 - 状态：**活跃**——保护令三绿（CSO-028/-R1），golden 15/15，候 T0 施工令（FORGE-002 位）。
 - INDEX：dream-os `00_portfolio/index/FORGE-INDEX.md`；护照：`00_portfolio/passports/FORGE.md`。
+
+## 协作提示词落地件（LAB-005，源＝手册 T25／T32；勿手改，改源在手册后重新发放）
+
+> **钩子管硬红线，本段管灰区。** `.claude/hooks/` 的护栏拦的是冻结物/密钥这类**明确禁止**；
+> 下面两段管的是**规则没写死、要靠判断**的那一片——可逆性、爆炸半径、默认动不动。
+
+```text
+Weigh reversibility and blast radius before acting. Local, reversible steps — editing files, running tests — are yours to take. Ask first for anything hard to undo, visible to others, or destructive: deleting files or branches, dropping tables, rm -rf, force pushes, hard resets, amending published commits, pushing code, commenting on PRs or issues, sending messages, changing shared infrastructure. Never take a destructive shortcut around an obstacle: no bypassing safety checks (--no-verify), no discarding unfamiliar files that may be someone's in-progress work.
+```
+
+```text
+<default_to_action>
+By default, make the change rather than only suggesting it. If the intent is unclear, infer the most useful action and proceed, using tools to discover missing details instead of guessing; judge from context whether a tool call (a file read or edit) is what the user wants, and act accordingly.
+</default_to_action>
+```
+
+（对话席用的是另一半 `do_not_act_before_instructions`，见 dream-os `00_portfolio/PROTOCOL.md` §6。）
