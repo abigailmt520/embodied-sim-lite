@@ -33,4 +33,4 @@ By default, make the change rather than only suggesting it. If the intent is unc
 </default_to_action>
 ```
 
-（对话席用的是另一半 `do_not_act_before_instructions`，见 dream-os `00_portfolio/PROTOCOL.md` §6。）
+（对话席用的是另一半 `do_not_act_before_instructions`，见 dream-os `00_portfolio/PROTOCOL.md` §5。）
