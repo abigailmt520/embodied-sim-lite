@@ -371,7 +371,7 @@ embodied-sim-lite/
 ## 8. 相关论文
 
 - **论文**:冯月. 面向具身智能的系统审计素养培养实践[J]. 计算机教育（**已录用，待刊**；预计2027年初见刊，卷期号见刊后更新）。
-- **论文**: Y. Feng, Y. Qing. Cloud--Edge LLM Instruction Grounding with Semantic-Level Safety for Low-Cost Robot Navigation: A Simulation Study. **Status: submitted to ICCWAMTIP 2026 (Paper 87)**；评测数据发布包见 `artifacts/`。
+- **论文**: Y. Feng, Y. Qing. Cloud--Edge LLM Instruction Grounding with Semantic-Level Safety for Low-Cost Robot Navigation: A Simulation Study. **Status: Accepted to ICCWAMTIP 2026 (to appear in the proceedings)** (Paper 87)；评测数据发布包见 `artifacts/`。
 - **图表复现**:论文全部统计图表(图 4/图 5/图 7/图 8,后两幅为 v1_2 更正版)及图 6 实拍合成图
   可由 [`tools/paper_figures/`](tools/paper_figures/) 一键复现;
   论文图 2 由 `audit/make_audit_figure.py --paper` 生成,图 3 由 `diagnostics/record_fork.py --paper` 生成,
