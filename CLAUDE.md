@@ -15,7 +15,7 @@
 - `artifacts/` 只增不改（`HASHES.lock`）；S5 样本只引 benchmark id。
 
 ## ④ 当前状态与 INDEX
-- 状态：**活跃**——保护令三绿（CSO-028/-R1），golden 15/15，候 T0 施工令（FORGE-002 位）。
+- 状态：**冻结基线维护态**（自 `v1.1.1` 起）：课程与已录用论文所引用的冻结版本，只收 hotfix（`maint/*` 分支＋补丁 tag，`FROZEN-CI.md` §7）；v1.1.1 纳入审计包规范 v1.0.1 与实验模式入口（默认关闭）；golden 15/15。
 - INDEX：dream-os `00_portfolio/index/FORGE-INDEX.md`；护照：`00_portfolio/passports/FORGE.md`。
 
 ## 协作提示词落地件（LAB-005，源＝手册 T25／T32；勿手改，改源在手册后重新发放）
@@ -34,3 +34,9 @@ By default, make the change rather than only suggesting it. If the intent is unc
 ```
 
 （对话席用的是另一半 `do_not_act_before_instructions`，见 dream-os `00_portfolio/PROTOCOL.md` §5。）
+
+## 用量卫生硬约束（直达·用量卫生，2026-09-12 原文版；六条原文与落地见 dream-os `.claude/skills/repo-hygiene/SKILL.md` §9）
+
+- **课件审读禁整页图 Read**：走 pptx→文本导出（课件真源＝页面稿文本），文本审读；图片只做抽检，**每会话 ≤5 张**。
+- **子代理配额**：每令 ≤5 个，只用于真正独立可并行的活；给子代理最小上下文；**禁 busy-wait**。
+- **禁轮询循环**：等 CI、等文件——**退出会话、下次核对，或由 GitHub 通知**；空转的 `sleep 1` 也在烧五小时窗（它让会话保持活跃）。

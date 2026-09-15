@@ -4,3 +4,5 @@ artifacts/README.md	x-goog/API端点/secret/password/token赋值
 tools/audit_secrets.py	.*
 tools/audit_allowlist.txt	.*
 tools/*	audit_secrets\.py
+CHANGELOG.md	audit_secrets\.py
+CONTRIBUTING.md	audit_secrets\.py

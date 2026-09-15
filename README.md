@@ -1,4 +1,4 @@
-> 🧊 **课程与论文冻结基线**（2026-09-15 起）：本仓是课程（`course-2026A`；综 II 预冻结点 `course-2026B-pre1`）与已录用论文（`paper-jsjjy-2026`、`paper-p4-v1`）所引用的冻结版本，**不再新增功能**，只接受 hotfix（`maint/*` 分支＋补丁 tag，流程见 `FROZEN-CI.md` §7）。
+> 🧊 **课程与论文冻结基线**（2026-09-15 起；**自 `v1.1.1` 起进入冻结基线维护态**）：本仓是课程（`course-2026A`；综 II 预冻结点 `course-2026B-pre1`）与已录用论文（`paper-jsjjy-2026`、`paper-p4-v1`）所引用的冻结版本，**不再新增功能**，只接受 hotfix（`maint/*` 分支＋补丁 tag，流程见 `FROZEN-CI.md` §7）。
 > 📌 **论文工件快照**：tag `paper87-artifacts-r3.1`（工件提交 `7a071a2`；取代 `paper87-artifacts-r3`：datapack 补齐 3B 节；r3 与 `paper87-artifacts` 保留，勘误见 artifacts/ERRATA.md）· 基准 `artifacts/benchmark/benchmark_v1_frozen.csv` SHA-256 `101477654d98d4d88ba50dc4b73873ca635bb7baff13bb7ae6c69bf4c0ac2d8e` · 路径 `artifacts/`
 > 📌 **Paper-87 artifact snapshot**: tag `paper87-artifacts-r3.1` (artifacts commit `7a071a2`; supersedes r3 — datapack 3B section added; r3 and `paper87-artifacts` retained, see artifacts/ERRATA.md) · benchmark SHA-256 `101477654d98d4d88ba50dc4b73873ca635bb7baff13bb7ae6c69bf4c0ac2d8e` · path `artifacts/`
 > 📌 **Paper-2 平台快照**：tag `paper2-final`（commit `4f111ad`，独立分支 `paper2-embodied-simlite`，冻结、不并入 master）
@@ -135,8 +135,16 @@ python tools/audit_tools/analyze_packs.py <包目录>            # 汇总 → au
 python tools/audit_tools/selftest.py                          # 红测：合法包判绿、五种篡改面判红
 #    出图对接：make_paper_figures.py --audit-json audit_summary.json → figA_* 系列
 #    包格式、哈希链与指标口径 → 见 docs/audit_pack_spec.md
-#    注：本仓为冻结基线，审计包的产生侧入口不在本仓；本节工具校验的是**已有的**审计包，
-#        可用 make_fixture_pack.py 离线造包自测。
+#    离线造包自测：make_fixture_pack.py；产生侧离线红测：python tools/audit_tools/exp_selftest.py
+
+# ⑩（默认关闭）实验模式：过程性证据采集的产生侧——双盲注入 + 证伪动作留痕 + 防篡改审计包
+AUDIT_EXP=1 python inference_server.py   # 或 python inference_server.py --audit-exp；不开时平台行为与此前逐字节一致
+#    学生浏览器打开 http://<教师机IP>:8000/?exp=1&uid=S07   （uid＝匿名代号，勿用姓名或学号）
+#    → 审计操作台：证伪动作（slip 归零 / 断流自检 / 帧序探针，只作用于本会话）、判定、平台截图（服务端烧水印）、
+#      一键导出 {uid}_{session_id}.zip（凭会话票据、页面自动处理；导出即结束会话），再用 ⑨ 的工具校验汇总
+#    教师自测：两个终端都 export AUDIT_TEACHER_KEY=<一次性口令>，再跑
+#      python tools/audit_tools/simulate_sessions.py --verify   （口令只认环境变量，经请求头发送）
+#    双盲前提：服务端在教师机、学生只经浏览器连入；参数、端点与附注字段 → 见 docs/audit_pack_spec.md §9
 ```
 
 ---
@@ -393,4 +401,4 @@ embodied-sim-lite/
 
 ## 9. 许可证
 
-见 [LICENSE](LICENSE)。
+见 [LICENSE](LICENSE)。参与贡献见 [CONTRIBUTING.md](CONTRIBUTING.md)（含 AI 辅助生成内容声明）；行为准则见 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)；版本变更见 [CHANGELOG.md](CHANGELOG.md)。

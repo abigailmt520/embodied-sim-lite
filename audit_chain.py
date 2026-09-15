@@ -3,7 +3,7 @@
 audit_chain.py —— 审计日志哈希链与 summary 复算(共享规范,纯标准库)
 ====================================================================
 被两侧共同引用,保证「写入」与「校验」用同一套字节级规范:
-    - inference_server.py    实验模式写 JSONL 审计日志(任务六)
+    - experiment_mode.py     实验模式写 JSONL 审计日志(任务六卡B;经 inference_server.py 开关接入,默认关闭)
     - tools/audit_tools/     verify_pack.py / analyze_packs.py 独立复算
 
 哈希链规范(docs/audit_pack_spec.md §2):
@@ -97,6 +97,9 @@ def derive_summary(events: list[dict]) -> dict:
         定位正确    : hit 且 checkpoint 与注入类型一致
         false_alarm : 健康轮且 final 判定为 abnormal
         检出时延    : final 判定时刻 − INJECT 时刻(仅命中轮)
+        incomplete  : 日志无 INJECT 但 SESSION_END 记下的分配条件是注入类型(起爆前即结束)
+                      → condition 取分配条件,hit/false_alarm 均为假,汇总时剔除(v1.0.1)
+        判定早于起爆: 注入轮最终判定早于 INJECT → 不计命中、不算时延(v1.0.1)
     """
     start = next((e for e in events if e["event"] == "SESSION_START"), None)
     inject = next((e for e in events if e["event"] == "INJECT"), None)
@@ -104,10 +107,16 @@ def derive_summary(events: list[dict]) -> dict:
     final = verdicts[-1] if verdicts else None
     shots = [e for e in events if e["event"] == "SCREENSHOT"]
     self_tests = [e["payload"].get("action") for e in events if e["event"] == "SELF_TEST"]
+    end = next((e for e in reversed(events) if e["event"] == "SESSION_END"), None)
+    assigned = (end.get("payload") or {}).get("assigned_condition") if end else None
 
-    condition = inject["payload"]["type"] if inject else "healthy"
+    # 起爆前即结束:日志无 INJECT,但分配条件是注入类型 → 标 incomplete,不得复算成健康轮
+    incomplete = bool(inject is None and assigned in ("C1", "C2", "C3"))
+    condition = inject["payload"]["type"] if inject else (assigned if incomplete else "healthy")
     fv = final["payload"] if final else None
-    hit = bool(inject and fv and fv.get("verdict") == "abnormal")
+    # 最终判定早于起爆:不计命中、不算时延(仍是注入轮,计入发现率分母)
+    verdict_before_onset = bool(inject and final and _ts_ms(final["ts"]) < _ts_ms(inject["ts"]))
+    hit = bool(inject and fv and fv.get("verdict") == "abnormal" and not verdict_before_onset)
     latency = _ts_ms(final["ts"]) - _ts_ms(inject["ts"]) if hit else None
     return {
         "uid": events[0]["uid"] if events else None,
@@ -121,7 +130,9 @@ def derive_summary(events: list[dict]) -> dict:
                            "ts": final["ts"]} if final else None),
         "hit": hit,
         "localization_correct": bool(hit and fv.get("checkpoint") == condition),
-        "false_alarm": bool(inject is None and fv and fv.get("verdict") == "abnormal"),
+        "false_alarm": bool(inject is None and not incomplete and fv and fv.get("verdict") == "abnormal"),
+        "incomplete": incomplete,
+        "verdict_before_onset": verdict_before_onset,
         "detect_latency_ms": (round(latency, 1) if latency is not None else None),
         "self_tests": self_tests,
         "n_screenshots": len(shots),

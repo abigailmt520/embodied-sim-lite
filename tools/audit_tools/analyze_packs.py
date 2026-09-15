@@ -138,12 +138,16 @@ def load_pack(path, skip_verify=False):
 
 
 def aggregate(records):
+    # incomplete(起爆前即结束)不进任何比例与时延,单列计数(规范 v1.0.1 §4/§5)
+    usable = [r for r in records if not r.get("incomplete")]
     out = {"generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
            "n_packs": len(records), "metrics_spec": "docs/audit_pack_spec.md §5",
+           "n_incomplete_excluded": len(records) - len(usable),
+           "n_verdict_before_onset": sum(1 for r in usable if r.get("verdict_before_onset")),
            "checkpoints": {}, "healthy": {}, "sessions": records}
     for cp in ("C1", "C2", "C3"):
-        rs = [r for r in records if r["condition"] == cp]
-        det = [r for r in records if r["condition"] == cp and r["hit"]]
+        rs = [r for r in usable if r["condition"] == cp]
+        det = [r for r in usable if r["condition"] == cp and r["hit"]]
         loc = [r for r in det if r["localization_correct"]]
         lat = [r["detect_latency_ms"] for r in det if r["detect_latency_ms"] is not None]
         out["checkpoints"][cp] = {
@@ -154,7 +158,7 @@ def aggregate(records):
             "localization_accuracy": round(len(loc) / len(det), 4) if det else None,
             "latency_ms": _median_iqr(lat),
         }
-    hs = [r for r in records if r["condition"] == "healthy"]
+    hs = [r for r in usable if r["condition"] == "healthy"]
     fa = [r for r in hs if r["false_alarm"]]
     out["healthy"] = {"n": len(hs), "false_alarms": len(fa),
                       "false_alarm_rate": round(len(fa) / len(hs), 4) if hs else None,
@@ -167,7 +171,8 @@ def write_receipts(records, path):
         w = csv.writer(fh)
         w.writerow(["uid", "session_id", "condition", "verdict", "checkpoint",
                     "hit_or_correct_rejection", "localization_correct",
-                    "detect_latency_ms", "self_tests", "n_screenshots"])
+                    "detect_latency_ms", "self_tests", "n_screenshots",
+                    "incomplete", "verdict_before_onset"])
         for r in sorted(records, key=lambda x: (x["uid"] or "", x["session_id"] or "")):
             fv = r["final_verdict"] or {}
             correct = (r["hit"] if r["condition"] != "healthy"
@@ -176,7 +181,8 @@ def write_receipts(records, path):
                         fv.get("verdict"), fv.get("checkpoint"),
                         int(bool(correct)), int(bool(r["localization_correct"])),
                         r["detect_latency_ms"],
-                        "|".join(r["self_tests"]), r["n_screenshots"]])
+                        "|".join(r["self_tests"]), r["n_screenshots"],
+                        int(bool(r.get("incomplete"))), int(bool(r.get("verdict_before_onset")))])
 
 
 def main():
@@ -200,6 +206,8 @@ def main():
     write_receipts(records, args.csv)
 
     print(f"共汇总 {len(records)}/{len(zips)} 包 → {args.out} / {args.csv}")
+    print(f"  剔除未完成会话(起爆前即结束) {summary['n_incomplete_excluded']} 个;"
+          f"判定早于起爆 {summary['n_verdict_before_onset']} 个(不计命中)")
     for cp, m in summary["checkpoints"].items():
         lat = m["latency_ms"]
         lat_s = (f"{lat['median']/1000:.1f}s [{lat['iqr'][0]/1000:.1f},"

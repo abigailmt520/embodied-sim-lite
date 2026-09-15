@@ -5,7 +5,7 @@ make_fixture_pack.py —— 离线造审计包(卡A自测夹具,纯标准库,不
 按 docs/audit_pack_spec.md 的规范直接调 audit_chain 造包,用途只有一个:
 **给 verify_pack.py 一个可判绿的合法包与一批可判红的篡改包**,让红测能红。
 
-与 tools/audit_tools/simulate_sessions.py 的分工(后者属卡B,尚未入仓):
+与 tools/audit_tools/simulate_sessions.py 的分工(后者属卡B,FORGE-004 入仓):
     simulate_sessions.py  端到端跑真服务端的实验模式(?exp=1),验的是**平台**;
     make_fixture_pack.py  离线按规范造字节,验的是**校验器自身**——
                           校验器的测试不该依赖被它校验的那个系统。

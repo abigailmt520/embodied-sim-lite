@@ -29,7 +29,7 @@
 ## 4. tag only
 
 - 课程与论文**只认 tag**，不认分支。三面 tag 均为附注 tag，**永不移动/删除**；GitHub tag ruleset 对 `course-*`、`paper*-*` 禁删禁改（含管理员）。
-- 新版本＝新 tag（`course-2026B`、`paper-p4-v2`…），旧 tag 保留；`tools/publish.sh` 只推显式指定且匹配前缀白名单（`paper*-*`、`p5-*`、`course-*`）的 tag。
+- 新版本＝新 tag（`course-2026B`、`paper-p4-v2`…），旧 tag 保留；`tools/publish.sh` 只推显式指定且匹配前缀白名单（`paper*-*`、`p5-*`、`course-*`；FORGE-004 增发布版本 `v<主>.<次>.<修>[-预发布]`）的 tag。
 - **镜像纪律的秤**：Gitee 无 ruleset/Actions，接受为残余风险；对冲＝`tools/mirror_check.sh` 双远端受保护 tag/关键分支哈希比对（`publish.sh` 双推后自动跑、`.github/workflows/mirror.yml` 每日巡检），漂移即红。所有者经「停用 ruleset→删→恢复」两步可绕过 GitHub 侧保护（平台固有），演练已验拒（FROZEN-CI §6）。
 - 分支模型：`master`＝开发主线（TA-049 所称 `main`；默认分支名沿用 `master`，改名属破坏性动作，不在本令内）；`release/vX.Y`＝发布线；**`release/v1.1`＝现钉版**（`bc8fa50`，与 `course-2026A` 同点）：热修只入此线并打新 tag，课程不自动跟随；`paper-sync-v1.1`、`paper2-embodied-simlite` 为冻结分支，不再提交（publish.sh 默认拒推）。
 

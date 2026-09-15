@@ -22,6 +22,7 @@ inference_server.py
 
 依赖：fastapi, uvicorn, websockets, stable-baselines3, torch, numpy。
 运行：python inference_server.py   （或 uvicorn inference_server:app --host 0.0.0.0 --port 8000）
+实验模式（过程性证据采集，默认关闭）：python inference_server.py --audit-exp，见 experiment_mode.py 与 docs/audit_pack_spec.md §9。
 """
 
 import asyncio
@@ -138,6 +139,28 @@ env = (EmbodiedNavEnv(render_mode=None) if _SLIP_OVERRIDE is None
 model: PPO | None = None
 
 
+# ====================================================================
+# 实验模式开关（FORGE-004 任务六卡 B；加法＋默认关闭）
+# ====================================================================
+def _resolve_audit_exp() -> bool:
+    """过程性证据采集的实验模式总开关：命令行 `--audit-exp` 或环境变量 `AUDIT_EXP`（1/true/yes/on）。
+
+    **未开启时本文件不导入 experiment_mode、不注册新路由、首页与 /health 原样**——
+    开关关闭态与本开关引入前逐字节一致（ITERATION.md「加法＋开关」）。
+    开启后仅 URL 带 `?exp=1` 的 WebSocket 连接进入实验会话，普通观测窗与 ROS 2 桥接不受影响。
+    """
+    if "--audit-exp" in sys.argv:
+        return True
+    return os.environ.get("AUDIT_EXP", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+if _resolve_audit_exp():
+    import experiment_mode                 # 仅开关打开时导入：关闭态连这一模块都不加载
+    _EXP = experiment_mode.ExperimentContext(env)
+else:
+    _EXP = None
+
+
 def load_model() -> PPO:
     """重建与训练期同构的 PPO，并载入 .pth 权重（policy state_dict）。
 
@@ -184,7 +207,10 @@ async def simulation_loop():
                                      truncated=truncated, info=info)
         # 服务端增补一个控制权标记（不污染 env 契约），供前端遥测显示
         state["control_mode"] = "override" if manual is not None else "rl"
-        await manager.broadcast(json.dumps(state, separators=(",", ":")))
+        if _EXP is None:   # 开关关闭：原样统一广播（与实验模式引入前逐字节一致）
+            await manager.broadcast(json.dumps(state, separators=(",", ":")))
+        else:              # 实验模式：普通连接收原样广播，?exp=1 会话收按注入调度改写后的专属状态
+            await _EXP.distribute(manager, state, json.dumps(state, separators=(",", ":")), now)
 
         # —— 4) 回合结束自动复位，让孪生演示持续滚动 ——
         if terminated or truncated:
@@ -211,6 +237,8 @@ async def lifespan(app: FastAPI):
     if _SLIP_OVERRIDE is not None:   # 仅在开关打开时多打一行；关闭态 stdout 与引入前逐字节一致
         print(f">>> [slip 开关] 里程计打滑系数 slip={env.slip_factor}"
               f"（来源：--slip / SLIP；slip=0 ⇒ odom ≡ truth 退化对照档）")
+    if _EXP is not None:             # 仅实验模式开启时多打；关闭态 stdout 与引入前逐字节一致
+        print(_EXP.startup_line(HTML_CONTENT))
     task = asyncio.create_task(simulation_loop())
     try:
         yield
@@ -220,10 +248,14 @@ async def lifespan(app: FastAPI):
             await task
         except asyncio.CancelledError:
             pass
+        if _EXP is not None:         # 未导出的实验会话补记 SESSION_END 并封闭日志
+            _EXP.shutdown()
         print(">>> 推理心跳已停止。")
 
 
 app = FastAPI(title="Embodied-SimLite Inference Gateway", lifespan=lifespan)
+if _EXP is not None:                 # 实验模式端点（/screenshot、/export_pack）只在开关打开时注册
+    _EXP.register_routes(app)
 
 
 @app.websocket("/ws")
@@ -233,9 +265,14 @@ async def websocket_endpoint(ws: WebSocket):
     - 下行：服务端按 60Hz 广播 env.get_render_state() 的孪生状态。
     - 上行：仅识别 ROS 2 桥接器下发的人工覆盖控制
             {"cmd_vel": {"linear": <m/s>, "angular": <rad/s>}}；其余消息忽略。
+    - 实验模式（服务端 --audit-exp／AUDIT_EXP=1 且 URL 带 ?exp=1；默认关闭）：另识别
+            {"self_test": {...}} 与 {"student_verdict": {...}}，见 experiment_mode.py。
     """
     await manager.connect(ws)
+    sess = None
     try:
+        if _EXP is not None:         # 实验模式：URL 带 ?exp=1 才建会话并下发握手；否则 None（普通连接）
+            sess = await _EXP.open_session(ws)
         while True:
             raw = await ws.receive_text()
             try:
@@ -249,10 +286,16 @@ async def websocket_endpoint(ws: WebSocket):
                     angular=float(cv.get("angular", 0.0)),
                     now=asyncio.get_event_loop().time(),
                 )
+            if sess is not None and isinstance(data, dict):
+                _EXP.handle_client_message(sess, data, asyncio.get_event_loop().time())
     except WebSocketDisconnect:
         manager.disconnect(ws)
+        if _EXP is not None:
+            _EXP.on_disconnect(ws)
     except Exception:
         manager.disconnect(ws)
+        if _EXP is not None:
+            _EXP.on_disconnect(ws)
 
 
 @app.get("/health")
@@ -266,6 +309,8 @@ async def health():
     }
     if _SLIP_OVERRIDE is not None:   # 加法：开关关闭时不出现此键，旧响应逐字节不变
         body["slip"] = env.slip_factor
+    if _EXP is not None:             # 加法：实验模式关闭时不出现此键，旧响应逐字节不变
+        body.update(_EXP.health_extra())
     return body
 
 
@@ -717,7 +762,7 @@ HTML_CONTENT = """
 @app.get("/")
 async def index():
     """直出 Three.js 孪生观测域前端（迁移自旧版 ProductV1.0 的 html_content）。"""
-    return HTMLResponse(HTML_CONTENT)
+    return HTMLResponse(HTML_CONTENT if _EXP is None else _EXP.html(HTML_CONTENT))
 
 
 if __name__ == "__main__":

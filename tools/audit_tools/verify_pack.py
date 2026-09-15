@@ -24,7 +24,8 @@ import audit_chain  # noqa: E402
 # summary 中由日志复算、必须一致的字段(platform_version 等附注字段不参与比对)
 CHECK_FIELDS = ("uid", "session_id", "seed", "condition", "onset_ms", "final_verdict",
                 "hit", "localization_correct", "false_alarm", "detect_latency_ms",
-                "self_tests", "n_screenshots", "n_events")
+                "self_tests", "n_screenshots", "n_events",
+                "incomplete", "verdict_before_onset")   # 后两项自审计包规范 v1.0.1 起
 
 
 def verify_one(path: str) -> bool:
