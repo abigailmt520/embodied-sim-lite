@@ -100,3 +100,16 @@
 - 2026-09-08 **CI 复跑（run 34218626251，guard/cso-028-r1，依赖钉版生效：numpy 2.4.6 / torch 2.12.1+cpu / matplotlib 3.11.0 与基准机一致）**：三 job success；A/B 15 件逐字节；冻结路径 19 件不变、只增路径 3 件前缀校验过；golden 对照 report 仍 9/15——6 件差异定性：4 份 session 舍 6 位后各 50 处、|Δ|=1e-6（边界翻转）；2 张 PNG 像素 0 差、仅编码字节异。据此收敛第二针：session 舍 4 位＋容差 1e-4 等价、PNG 规范化重编码、策略 strict；golden 第四次录制（RECORD.json history 第 3 条）。**下一次 CI 结果见后续追加。**
 - 2026-09-08 **CI 复跑（run 34219106750，收敛第二针）**：gate1/gate3 success；gate2 **13/15**——四份 session 舍 4 位后**逐字节相同**（容差护栏未触发）；两张 PNG 经规范化重编码后跨平台**仍异**（Pillow 捆绑 zlib 差异）。第三针：PNG 改 `compare: pixel_exact`（像素精确等价），golden 第五次录制（RECORD.json history 第 4 条）。**下一次 CI 结果见后续追加。**
 - 2026-09-08 **CI 复跑（run 34219367443，收敛第三针）：三 job success，golden 对照 strict 判定 15/15**——逐字节 13（含四份 session 舍 4 位后跨平台逐字节相同，容差护栏未触发）＋ 像素精确等价 2（1430×546 与 1170×650 像素全同、容器字节异）。裁定②「目标 golden 15/15 跨平台」达成；豁免清单＝空（4 份 session 与 2 张 PNG 为成文的内容等价规则，非人工白名单）。策略 `strict` 生效。
+- 2026-09-15 **FORGE-004 T0 残项（按 FORGE-007 补丁：任务六卡 B 与版本 tag 不进本仓）**：
+  - **锚点内容同一性结论（2026-09-08 裁定①条）复核仍成立**：门3 §3.1 复算 `HASHES.lock` 22 条——冻结路径 19 条哈希不变、只增路径 3 条以锚点 `b83ec8c` 内容为前缀；三冻结 tag 两远端未动（`course-2026A`／`paper-jsjjy-2026` → `bc8fa50`，`paper-p4-v1` → `b83ec8c`）。
+  - **golden 维持 strict 15/15，豁免清单仍为空**：基准机本地「逐字节 15 ＋ 内容等价 0」，无需收敛。
+
+## 7. 冻结基线与 hotfix 流程（FORGE-007，2026-09-15 起；只增不删）
+
+- **冻结范围**：`master`、`paper-sync-v1.1`、`paper2-embodied-simlite`、`release/v1.1` 与全部 tag。本仓自此是课程与已录用论文所引用的**冻结基线**，不再接收功能开发。
+- **可改动面**：hotfix，以及 `README.md`、CI 配置（`.github/workflows/`）与本文件；其余文件的任何改动都必须是 hotfix。
+- **hotfix 的定义**：修复使冻结基线**无法按其既有文档复现或运行**的缺陷（依赖失效、平台差异、文档错误致不可复现）；不含新功能，不含行为改进。
+- **流程**：①自受影响的冻结 tag 或 `master` 切 `maint/<日期>-<事由>` 分支；②本地 `python3 tools/ready_check.py --all` 三门全绿；③`tools/publish.sh maint/<…> github` 推分支跑 CI；④CI 三门全绿后快进合入 `master`，`tools/publish.sh master` 双推；⑤打补丁附注 tag `<被修复的冻结 tag>-hotfix.<N>`（如 `course-2026A-hotfix.1`、`paper-p4-v1-hotfix.1`；落在 `publish.sh` 白名单与 GitHub tag ruleset 之内），`tools/publish.sh --tag <名>` 双推；⑥在本节「记录」追加一条（缺陷、影响面、证据、补丁 tag）。**原冻结 tag 永不移动。**
+- **周检**：`gates.yml` 增每周定时（周一 02:41 UTC）——门2 经 `course_manifest.yaml` 钉 `course-2026A`、门3 经 `HASHES.lock` 钉 `paper-p4-v1`，持续确认冻结基线在当期运行环境下仍可复现；红灯即走上面的 hotfix 流程，不改冻结 tag。
+- **`course-2026B-pre1`**（附注 tag，打在本节所在提交上）：综 II（2026-2027-2 学期）所依平台状态的预冻结点；学期冻结日另打 `course-2026B`，并由课程迁移令更新 `course_manifest.yaml`。与 `course-2026A` 的差异＝CSO-028 保护面文件、FORGE-002 `--slip` 开关与桥接日志（契约 v1.1.0，默认关闭）、FORGE-003 审计包离线工具链与文档；课程入口默认行为与 `course-2026A` 逐字节一致（门2 A/B）。
+- **记录**：（发生 hotfix 时于此追加）

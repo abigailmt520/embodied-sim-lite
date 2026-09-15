@@ -1,8 +1,9 @@
+> 🧊 **课程与论文冻结基线**（2026-09-15 起）：本仓是课程（`course-2026A`；综 II 预冻结点 `course-2026B-pre1`）与已录用论文（`paper-jsjjy-2026`、`paper-p4-v1`）所引用的冻结版本，**不再新增功能**，只接受 hotfix（`maint/*` 分支＋补丁 tag，流程见 `FROZEN-CI.md` §7）。
 > 📌 **论文工件快照**：tag `paper87-artifacts-r3.1`（工件提交 `7a071a2`；取代 `paper87-artifacts-r3`：datapack 补齐 3B 节；r3 与 `paper87-artifacts` 保留，勘误见 artifacts/ERRATA.md）· 基准 `artifacts/benchmark/benchmark_v1_frozen.csv` SHA-256 `101477654d98d4d88ba50dc4b73873ca635bb7baff13bb7ae6c69bf4c0ac2d8e` · 路径 `artifacts/`
 > 📌 **Paper-87 artifact snapshot**: tag `paper87-artifacts-r3.1` (artifacts commit `7a071a2`; supersedes r3 — datapack 3B section added; r3 and `paper87-artifacts` retained, see artifacts/ERRATA.md) · benchmark SHA-256 `101477654d98d4d88ba50dc4b73873ca635bb7baff13bb7ae6c69bf4c0ac2d8e` · path `artifacts/`
 > 📌 **Paper-2 平台快照**：tag `paper2-final`（commit `4f111ad`，独立分支 `paper2-embodied-simlite`，冻结、不并入 master）
 > 📌 **Paper-2 platform snapshot**: tag `paper2-final` (commit `4f111ad`, standalone branch `paper2-embodied-simlite`, frozen, never merged into master)
-> 📌 **保护面 / 三道门（CSO-028）**：课程 tag `course-2026A`（= `paper-sync-v1.1` HEAD）· 论文 tag `paper-jsjjy-2026`、`paper-p4-v1` · 契约 `docs/teaching_api.md` v1.0.0 · 纪律 `ITERATION.md` · CI 门定义 `FROZEN-CI.md` · 本地 `python3 tools/ready_check.py --all`
+> 📌 **保护面 / 三道门（CSO-028）**：课程 tag `course-2026A`（= `paper-sync-v1.1` HEAD）· 论文 tag `paper-jsjjy-2026`、`paper-p4-v1` · 契约 `docs/teaching_api.md` v1.1.0 · 纪律 `ITERATION.md` · CI 门定义 `FROZEN-CI.md` · 本地 `python3 tools/ready_check.py --all`
 
 # Embodied-SimLite
 
@@ -134,8 +135,8 @@ python tools/audit_tools/analyze_packs.py <包目录>            # 汇总 → au
 python tools/audit_tools/selftest.py                          # 红测：合法包判绿、五种篡改面判红
 #    出图对接：make_paper_figures.py --audit-json audit_summary.json → figA_* 系列
 #    包格式、哈希链与指标口径 → 见 docs/audit_pack_spec.md
-#    注：产生审计包的平台实验模式入口尚未入仓（属课程冻结面改动，另行评审）；
-#        本节工具校验的是**已有的**审计包，可用 make_fixture_pack.py 离线造包自测。
+#    注：本仓为冻结基线，审计包的产生侧入口不在本仓；本节工具校验的是**已有的**审计包，
+#        可用 make_fixture_pack.py 离线造包自测。
 ```
 
 ---

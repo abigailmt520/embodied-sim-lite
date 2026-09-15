@@ -3,6 +3,8 @@
 # 定义与容差成文：FROZEN-CI.md；纪律：ITERATION.md
 name: gates
 on:
+  schedule:
+    - cron: "41 2 * * 1"   # 冻结基线周检（FORGE-007）：每周一 02:41 UTC，门2 钉 course-2026A、门3 钉 paper-p4-v1
   push:
     branches: ["**"]
     tags-ignore: ["**"]
