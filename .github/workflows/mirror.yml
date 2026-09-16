@@ -14,5 +14,17 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - name: 双远端受保护 tag / 关键分支哈希比对
-        run: bash tools/mirror_check.sh
+      - name: 双远端受保护 tag / 关键分支哈希比对（含推送时序重试窗口）
+        run: |
+          # 根因（FORGE-009，2026-09-15）：publish.sh 按 git remote 输出顺序推送（github 排在 origin 前），
+          # master 推送触发的本巡检可能在 tag 已到 GitHub、尚未到 Gitee 的数秒窗口内运行而报漂移。
+          # 维护态红线不许改 publish.sh（tools/ 不在可改动面），故在巡检侧加窗口：
+          # 最多比对 3 次、间隔 60s，末次仍漂移才判红——窗口只吸收推送时序，真漂移不会自愈。
+          for i in 1 2 3; do
+            if bash tools/mirror_check.sh; then exit 0; fi
+            [ "$i" = 3 ] && break
+            echo "mirror: 第 $i 次比对有漂移，等待 60s 后重试（推送时序窗口）"
+            sleep 60
+          done
+          echo "mirror: 重试窗口内仍有漂移 🔴（需人工核查）"
+          exit 1
