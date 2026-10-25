@@ -1,4 +1,4 @@
-# 双远端引用漂移巡检（CSO-028-R1 裁定③）：Gitee 无 ruleset/Actions，镜像纪律靠这杆秤。
+# 双远端引用漂移巡检（内部工单裁定③）：Gitee 无 ruleset/Actions，镜像纪律靠这杆秤。
 # 每日定时 + 手动 + master 推送后各跑一次；漂移即红（非 merge 必需检查，属报警）。
 name: mirror-check
 on:
@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: 双远端受保护 tag / 关键分支哈希比对（含推送时序重试窗口）
         run: |
-          # 根因（FORGE-009，2026-09-15）：publish.sh 按 git remote 输出顺序推送（github 排在 origin 前），
+          # 根因（内部工单，2026-09-15）：publish.sh 按 git remote 输出顺序推送（github 排在 origin 前），
           # master 推送触发的本巡检可能在 tag 已到 GitHub、尚未到 Gitee 的数秒窗口内运行而报漂移。
           # 维护态红线不许改 publish.sh（tools/ 不在可改动面），故在巡检侧加窗口：
           # 最多比对 3 次、间隔 60s，末次仍漂移才判红——窗口只吸收推送时序，真漂移不会自愈。

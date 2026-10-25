@@ -1,10 +1,10 @@
-# CI 三道门（CSO-028 平台保护令·任务2）：三门全绿方可合并 master（分支保护 required checks = 下列三个 job 名）
+# CI 三道门（内部工单平台保护令·任务2）：三门全绿方可合并 master（分支保护 required checks = 下列三个 job 名）
 # 门1 三门自检（旧）｜门2 课程一致性（ready_check --course 对 course-2026A）｜门3 论文复现（冻结基准子集复跑）
 # 定义与容差成文：FROZEN-CI.md；纪律：ITERATION.md
 name: gates
 on:
   schedule:
-    - cron: "41 2 * * 1"   # 冻结基线周检（FORGE-007）：每周一 02:41 UTC，门2 钉 course-2026A、门3 钉 paper-p4-v1
+    - cron: "41 2 * * 1"   # 冻结基线周检（内部工单）：每周一 02:41 UTC，门2 钉 course-2026A、门3 钉 paper-p4-v1
   push:
     branches: ["**"]
     tags-ignore: ["**"]
